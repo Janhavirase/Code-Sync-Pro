@@ -1,82 +1,127 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Mail, Lock, User, ArrowRight, Github } from 'lucide-react';
 
 const Auth = () => {
-    const [isLogin, setIsLogin] = useState(true); // Toggle state
+    const [isLogin, setIsLogin] = useState(true);
     const navigate = useNavigate();
 
-    // Form states
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [username, setUsername] = useState('');
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        
-        // TODO: Connect to Backend API later
-        // For now, let's simulate success to test the UI
-        if (!email || !password) {
+        if (!email || !password || (!isLogin && !username)) {
             toast.error('Please fill all fields');
             return;
         }
-
-        toast.success(isLogin ? 'Logged in successfully!' : 'Account created!');
-        
-        // Redirect to Home page after login
+        toast.success(isLogin ? 'Welcome back, Developer!' : 'Account created successfully!');
         navigate('/'); 
     };
 
     return (
-        <div className="homePageWrapper flex items-center justify-center min-h-screen bg-gray-900 text-white">
-            <div className="formWrapper bg-gray-800 p-8 rounded-xl shadow-2xl w-96 border border-gray-700">
-                <div className="logo mb-6 text-center">
-                    <img className="w-20 mx-auto mb-2" src="/code-sync.png" alt="code-sync-logo" />
-                    <h4 className="text-2xl font-bold text-green-400">CodeSync Pro</h4>
-                </div>
+        <div className="relative min-h-screen flex items-center justify-center bg-[#0a0a0a] overflow-hidden">
+            
+            {/* 🎨 AESTHETIC BACKGROUND ELEMENTS */}
+            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-green-900/20 blur-[120px] rounded-full"></div>
+            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-900/20 blur-[120px] rounded-full"></div>
 
-                <h4 className="mainLabel mb-4 text-gray-300 font-semibold text-center">
-                    {isLogin ? 'Welcome Back' : 'Create Account'}
-                </h4>
+            <div className="z-10 w-full max-w-md px-6">
+                {/* LOGO SECTION */}
+                <div className="flex flex-col items-center mb-10 animate-fadeIn">
+    <div className="flex items-center gap-3 group cursor-default">
+        {/* The "C" Icon with Gradient */}
+        <div className="w-12 h-12 bg-gradient-to-br from-[#3b82f6] to-[#a855f7] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 transform group-hover:scale-110 transition-transform duration-300">
+            <span className="text-white text-2xl font-black">C</span>
+        </div>
+        
+        {/* Typography: Bold White + Thin Gray */}
+        <div className="flex items-baseline gap-2">
+            <h1 className="text-3xl font-bold text-white tracking-tight">CodeSync</h1>
+        </div>
+    </div>
+</div>
+                {/* AUTH CARD */}
+                <div className="bg-[#161616]/80 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl">
+                    <div className="mb-8">
+                        <h2 className="text-2xl font-bold text-white">
+                            {isLogin ? 'Login' : 'Join the Club'}
+                        </h2>
+                        <p className="text-gray-400 text-sm mt-1">
+                            {isLogin ? 'Enter your credentials to continue' : 'Start your collaborative journey with us'}
+                        </p>
+                    </div>
 
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                    {!isLogin && (
-                        <input
-                            type="text"
-                            className="inputBox p-3 rounded-lg bg-gray-700 text-white outline-none border border-gray-600 focus:border-green-500 transition-all"
-                            placeholder="Username"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                        />
-                    )}
-                    <input
-                        type="email"
-                        className="inputBox p-3 rounded-lg bg-gray-700 text-white outline-none border border-gray-600 focus:border-green-500 transition-all"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                    />
-                    <input
-                        type="password"
-                        className="inputBox p-3 rounded-lg bg-gray-700 text-white outline-none border border-gray-600 focus:border-green-500 transition-all"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                    />
-                    
-                    <button className="btn joinBtn bg-green-500 hover:bg-green-600 text-black font-bold py-2 rounded-lg transition-all mt-2">
-                        {isLogin ? 'Login' : 'Sign Up'}
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {!isLogin && (
+                            <div className="relative group">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-green-500 transition-colors" size={18} />
+                                <input
+                                    type="text"
+                                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-gray-600 outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all shadow-inner"
+                                    placeholder="Username"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                />
+                            </div>
+                        )}
+
+                        <div className="relative group">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-green-500 transition-colors" size={18} />
+                            <input
+                                type="email"
+                                className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-gray-600 outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all shadow-inner"
+                                placeholder="Email Address"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="relative group">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-green-500 transition-colors" size={18} />
+                            <input
+                                type="password"
+                                className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-white placeholder:text-gray-600 outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/50 transition-all shadow-inner"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
+                        </div>
+
+                        <button className="w-full group bg-green-500 hover:bg-green-400 text-black font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] shadow-lg shadow-green-500/20">
+                            <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
+                            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    </form>
+
+                    {/* DIVIDER */}
+                    <div className="flex items-center my-6 gap-4">
+                        <div className="h-[1px] flex-1 bg-white/5"></div>
+                        <span className="text-gray-600 text-[10px] uppercase font-bold">Or continue with</span>
+                        <div className="h-[1px] flex-1 bg-white/5"></div>
+                    </div>
+
+                    <button className="w-full flex items-center justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 py-3 rounded-xl transition-all mb-4 text-sm font-medium">
+                        <Github size={18} />
+                        GitHub
                     </button>
-                </form>
 
-                <p className="mt-4 text-center text-sm text-gray-400">
-                    {isLogin ? "Don't have an account? " : "Already have an account? "}
-                    <span
-                        onClick={() => setIsLogin(!isLogin)}
-                        className="text-green-400 cursor-pointer hover:underline"
-                    >
-                        {isLogin ? 'Create one' : 'Login'}
-                    </span>
+                    <p className="text-center text-sm text-gray-500">
+                        {isLogin ? "New here? " : "Joined before? "}
+                        <button
+                            onClick={() => setIsLogin(!isLogin)}
+                            className="text-green-400 font-semibold hover:text-green-300 hover:underline transition-all"
+                        >
+                            {isLogin ? 'Create an account' : 'Login instead'}
+                        </button>
+                    </p>
+                </div>
+                
+                {/* FOOTER */}
+                <p className="mt-8 text-center text-gray-600 text-xs">
+                    Built with ❤️ for Developers. © 2026 CodeSync Pro.
                 </p>
             </div>
         </div>

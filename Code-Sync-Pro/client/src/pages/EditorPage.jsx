@@ -20,7 +20,7 @@ import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, 
     Settings, Play, Loader2, Download, Share2, 
-    ChevronLeft, Plus, Trash2, Hash
+    ChevronLeft, Plus, Trash2, Hash,UserPlus
 } from 'lucide-react';
 // ✅ IMPORT CUSTOM HOOKS
 import useEditorLayout from '../hooks/useEditorLayout';
@@ -87,7 +87,8 @@ const EditorPage = () => {
     const userStream = useRef();
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
-
+// --- 3. LOCAL STATE (Add this line) ---
+const [inviteCopied, setInviteCopied] = useState(false);
     // User Data
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
     const savedUser = getSavedUser();
@@ -333,7 +334,14 @@ const EditorPage = () => {
         saveAs(content, `CodeSync-Project-${roomId}.zip`);
         toast.success("Downloaded! 📦");
     };
-
+const handleInvite = async () => {
+        try {
+            await navigator.clipboard.writeText(window.location.href);
+            setInviteCopied(true);
+            toast.success('Invite link copied!');
+            setTimeout(() => setInviteCopied(false), 2000);
+        } catch (err) { toast.error('Failed to copy link'); }
+    };
     const saveProject = async () => {
         if (!userId) return toast.error("Guest Mode: Cannot Save.");
         try {
@@ -434,6 +442,13 @@ const EditorPage = () => {
     <Share2 size={14} />
     <span className="hidden sm:inline">Share</span>
 </button>
+<button 
+                            onClick={handleInvite} 
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                        >
+                            {inviteCopied ? <Check size={14} /> : <UserPlus size={14} />}
+                            <span className="hidden sm:inline">{inviteCopied ? 'Copied' : 'Invite'}</span>
+                        </button>
                         <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 transition-colors">📥 Download</button>
                         {isHost && <button className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600" onClick={saveProject}>💾 Save</button>}
                         <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isRunning ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isRunning}>{isRunning ? 'Running...' : '▶ Run'}</button>

@@ -9,7 +9,15 @@
 .animate-fadeIn {
     animation: fadeIn 0.3s ease-out forwards;
 }
+@keyframes float {
+  0% { transform: translateY(0px) rotate(-1deg); }
+  50% { transform: translateY(-15px) rotate(0deg); }
+  100% { transform: translateY(0px) rotate(-1deg); }
+}
 
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
 /* Ensure the app takes up full height */
 html, body, #root {
     height: 100%;
