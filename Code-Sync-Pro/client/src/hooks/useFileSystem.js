@@ -5,18 +5,75 @@ import { ACTIONS } from '../Actions';
 const useFileSystem = (initialFiles, socketRef, roomId) => {
     const [files, setFiles] = useState(initialFiles);
     const [activeFileName, setActiveFileName] = useState(files[0]?.name || 'main.js');
+    
+    // 🔒 REFS (The Secret to fixing the shake)
+    // These allow us to read the latest state inside the socket listener
+    // without triggering a re-render loop.
+    const filesRef = useRef(files);
     const activeFileNameRef = useRef(activeFileName);
     const codeRef = useRef(files[0]?.value || '');
     const fileHistoryRef = useRef({ 'main.js': ['// Write JS here\nconsole.log("Hello World");'] });
 
+    // Sync Refs with State
     useEffect(() => {
+        filesRef.current = files;
         activeFileNameRef.current = activeFileName;
-    }, [activeFileName]);
+    }, [files, activeFileName]);
 
+    // --- 1. HANDLE LOCAL CHANGES (My Typing) ---
     const updateFileContent = (fileName, newCode) => {
+        // Update local state
         setFiles(prev => prev.map(f => f.name === fileName ? { ...f, value: newCode } : f));
+        
+        // Update Ref immediately for consistency
+        if (fileName === activeFileName) {
+            codeRef.current = newCode;
+        }
+
+        // Emit to Server
+        if (socketRef.current) {
+            socketRef.current.emit(ACTIONS.CODE_CHANGE, {
+                roomId,
+                fileName,
+                code: newCode
+            });
+        }
     };
 
+    // --- 2. HANDLE REMOTE CHANGES (The Fix) ---
+    useEffect(() => {
+        if (!socketRef.current) return;
+
+        const handleRemoteChange = ({ fileName, code }) => {
+            // Check if we actually need to update (Prevent infinite loops)
+            const currentFile = filesRef.current.find(f => f.name === fileName);
+            if (currentFile && currentFile.value === code) return;
+
+            // Update the file list silently
+            setFiles(prev => prev.map(f => {
+                if (f.name === fileName) {
+                    return { ...f, value: code };
+                }
+                return f;
+            }));
+
+            // If the remote change is for the file I am currently looking at,
+            // update my editor reference so I see it.
+            if (fileName === activeFileNameRef.current) {
+                codeRef.current = code;
+            }
+        };
+
+        // Attach Listener
+        socketRef.current.on(ACTIONS.CODE_CHANGE, handleRemoteChange);
+
+        // Cleanup
+        return () => {
+            socketRef.current.off(ACTIONS.CODE_CHANGE, handleRemoteChange);
+        };
+    }, [socketRef.current]); // 👈 Only run once on mount (prevents shaking)
+
+    // --- 3. HELPER FUNCTIONS ---
     const switchFile = (fileName) => {
         setActiveFileName(fileName);
         const file = files.find(f => f.name === fileName);
@@ -40,6 +97,7 @@ const useFileSystem = (initialFiles, socketRef, roomId) => {
             value = `body { background: #fff; }`;
         } else if (newFileName.endsWith('.py')) {
             language = 'python';
+            value = `print("Hello World")`;
         } else if (newFileName.endsWith('.java')) {
             language = 'java';
             value = `public class ${newFileName.split('.')[0]} {\n    public static void main(String[] args) {\n        System.out.println("Hello World");\n    }\n}`;
