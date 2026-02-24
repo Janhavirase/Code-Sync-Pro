@@ -1,16 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import { nodePolyfills } from 'vite-plugin-node-polyfills' // 👈 Import this
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    nodePolyfills(), // <--- Solves "events" and "util" error
+    // ⬇️ ADD THIS NEW PLUGIN
+    nodePolyfills({
+      // Whether to polyfill `node:` protocol imports.
+      protocolImports: true,
+    }),
   ],
+  // Optional: Ensure global is defined (some libraries look for this)
   define: {
-    // ✅ Merge both fixes here:
-    global: 'window',          // Solves "global is not defined"
-    "process.env": {},         // Solves Excalidraw crash
+    global: 'window',
   },
 })

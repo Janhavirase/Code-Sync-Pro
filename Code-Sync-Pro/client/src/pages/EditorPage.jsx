@@ -20,8 +20,9 @@ import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, 
     Settings, Play, Loader2, Download, Share2, 
-    ChevronLeft, Plus, Trash2, Hash,UserPlus
+    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check
 } from 'lucide-react';
+
 // ✅ IMPORT CUSTOM HOOKS
 import useEditorLayout from '../hooks/useEditorLayout';
 import useFileSystem from '../hooks/useFileSystem';
@@ -34,26 +35,25 @@ const EditorPage = () => {
     const navigate = useNavigate();
     const socketRef = useRef(null);
     
-    // --- 2. CUSTOM HOOKS (Logic Extraction) ---
-    // Layout Logic
+    // --- 2. CUSTOM HOOKS ---
     const { layoutMode, setLayoutMode, consoleSize, setConsoleSize, isResizing, startResizing } = useEditorLayout();
     
-    // File System Logic
     const initialFiles = location.state?.templateFiles || [
         { name: 'main.js', language: 'javascript', value: '// Write JS here\nconsole.log("Hello World");' },
         { name: 'index.html', language: 'html', value: '\n<div class="container">\n  <h1>Hello World 🌍</h1>\n  <p>Live Preview Active!</p>\n</div>' },
         { name: 'style.css', language: 'css', value: 'body { font-family: sans-serif; background: #222; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; } \n.container { text-align: center; border: 2px solid tomato; padding: 20px; border-radius: 10px; } \nh1 { color: tomato; }' },
         { name: 'script.js', language: 'javascript', value: 'console.log("Loaded script.js");' }
     ];
+
     const { 
         files, setFiles, activeFileName, setActiveFileName, activeFileNameRef, 
-        codeRef, fileHistoryRef, switchFile, createNewFile, deleteFile 
+        codeRef, fileHistoryRef, switchFile, createNewFile, deleteFile, 
+        updateFileContent 
     } = useFileSystem(initialFiles, socketRef, roomId);
 
-    // Runner Logic
     const { output, setOutput, isRunning, customInput, setCustomInput, runCode } = useCodeRunner();
 
-    // --- 3. LOCAL STATE (UI Specific) ---
+    // --- 3. LOCAL STATE ---
     const [clients, setClients] = useState([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [editorTheme, setEditorTheme] = useState('dracula');
@@ -72,14 +72,10 @@ const EditorPage = () => {
     const [activeLine, setActiveLine] = useState(null);
     const [liveRepoUrl, setLiveRepoUrl] = useState(null);
     const [srcDoc, setSrcDoc] = useState('');
-    
-    // Time Travel State
     const [isTimeTravelActive, setIsTimeTravelActive] = useState(false);
     const [playbackIndex, setPlaybackIndex] = useState(0);
     const savedLiveCodeRef = useRef(null); 
     const isTimeTravelActiveRef = useRef(false);
-
-    // Media State
     const [stream, setStream] = useState(null);
     const [isSocketConnected, setIsSocketConnected] = useState(false);
     const peersRef = useRef([]);
@@ -87,18 +83,15 @@ const EditorPage = () => {
     const userStream = useRef();
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
-// --- 3. LOCAL STATE (Add this line) ---
-const [inviteCopied, setInviteCopied] = useState(false);
-    // User Data
+    const [inviteCopied, setInviteCopied] = useState(false);
+
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
     const savedUser = getSavedUser();
     const user = location.state?.user || (location.state?.username ? location.state : savedUser);
     const userId = location.state?.userId || user?.user?._id || user?._id || user?.id;
     const isHost = location.state?.isHost || !!userId;
 
-    // --- 4. EFFECTS & LOGIC ---
-
-    // Media Init
+    // --- 4. EFFECTS ---
     useEffect(() => {
         navigator.mediaDevices.getUserMedia({ video: true, audio: true })
             .then((currentStream) => { setStream(currentStream); })
@@ -120,79 +113,24 @@ const [inviteCopied, setInviteCopied] = useState(false);
 
     useEffect(() => { isTimeTravelActiveRef.current = isTimeTravelActive; }, [isTimeTravelActive]);
 
-    // Socket Initialization
+    // --- SOCKET INITIALIZATION ---
     useEffect(() => {
         const init = async () => {
             socketRef.current = await initSocket();
             setIsSocketConnected(true);
 
-            // WebRTC Helpers
-            function createPeer(userToSignal, callerID, stream) {
-                const peer = new Peer({ initiator: true, trickle: false, stream });
-                peer.on('signal', signal => socketRef.current.emit('sending-signal', { userToSignal, callerID, signal }));
-                return peer;
-            }
-            function addPeer(incomingSignal, callerID, stream) {
-                const peer = new Peer({ initiator: false, trickle: false, stream });
-                peer.on('signal', signal => socketRef.current.emit('returning-signal', { signal, callerID }));
-                peer.signal(incomingSignal);
-                return peer;
-            }
+            // ✅ 1. INSTANTLY JOIN ROOM
+            socketRef.current.emit(ACTIONS.JOIN, { roomId, username: location.state?.username || user?.username });
 
-            // WebRTC Logic
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                userStream.current = stream;
-                if (userVideo.current) {
-                    userVideo.current.srcObject = stream;
-                    userVideo.current.muted = true;
+            socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
+                if (username !== (location.state?.username || user?.username)) {
+                    toast.success(`${username} joined.`);
+                    socketRef.current.emit(ACTIONS.SYNC_CODE, { files, socketId });
                 }
-                
-                socketRef.current.emit(ACTIONS.JOIN, { roomId, username: location.state?.username || user?.username });
-
-                socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
-                    if (username !== (location.state?.username || user?.username)) {
-                        toast.success(`${username} joined.`);
-                        socketRef.current.emit(ACTIONS.SYNC_CODE, { files, socketId });
-                    }
-                    setClients(clients);
-                });
-
-                socketRef.current.on('all-users', users => {
-                    const peersList = [];
-                    users.forEach(userID => {
-                        const peer = createPeer(userID, socketRef.current.id, stream);
-                        peersRef.current.push({ peerID: userID, peer });
-                        peersList.push(peer);
-                    });
-                });
-
-                socketRef.current.on('user-joined', payload => {
-                    const peer = addPeer(payload.signal, payload.callerID, stream);
-                    peersRef.current.push({ peerID: payload.callerID, peer });
-                });
-
-                socketRef.current.on('receiving-returned-signal', payload => {
-                    const item = peersRef.current.find(p => p.peerID === payload.id);
-                    if(item) item.peer.signal(payload.signal);
-                });
-
-            } catch (err) {
-                toast.error("Joined without video/audio.");
-            }
-
-            // Code Sync Logic
-            socketRef.current.on(ACTIONS.CODE_CHANGE, ({ fileName, code }) => {
-                if (!fileHistoryRef.current[fileName]) fileHistoryRef.current[fileName] = [];
-                fileHistoryRef.current[fileName].push(code);
-                
-                setFiles(prev => prev.map(f => f.name === fileName ? { ...f, value: code } : f));
-                
-                if (fileName === activeFileNameRef.current && !isTimeTravelActiveRef.current) {
-                    codeRef.current = code;
-                }
+                setClients(clients);
             });
 
+            // ✅ 2. INSTANTLY ATTACH FILE SYNC LISTENERS (No more waiting for the camera!)
             socketRef.current.on(ACTIONS.FILE_CREATED, ({ files: remoteFiles }) => {
                 setFiles(curr => {
                     const next = [...curr];
@@ -237,6 +175,70 @@ const [inviteCopied, setInviteCopied] = useState(false);
                 setComments(prev => [...prev, newComment]);
                 toast("New comment added", { icon: '💬' });
             });
+
+            // ✅ 3. HANDLE CAMERA IN THE BACKGROUND (Using .then() instead of await)
+            const rtcConfig = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                ]
+            };
+
+            function createPeer(userToSignal, callerID, stream) {
+                const peer = new Peer({ initiator: true, trickle: false, stream, config: rtcConfig });
+                peer.on('signal', signal => socketRef.current.emit('sending-signal', { userToSignal, callerID, signal }));
+                peer.on('error', err => console.warn("Peer error:", err));
+                return peer;
+            }
+
+            function addPeer(incomingSignal, callerID, stream) {
+                const peer = new Peer({ initiator: false, trickle: false, stream, config: rtcConfig });
+                peer.on('signal', signal => socketRef.current.emit('returning-signal', { signal, callerID }));
+                peer.signal(incomingSignal);
+                peer.on('error', err => console.warn("Peer error:", err));
+                return peer;
+            }
+
+            // This runs silently in the background and won't block the editor!
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then(stream => {
+                    userStream.current = stream;
+                    if (userVideo.current) {
+                        userVideo.current.srcObject = stream;
+                        userVideo.current.muted = true;
+                    }
+                    
+                    socketRef.current.on('all-users', users => {
+                        const peersList = [];
+                        users.forEach(userID => {
+                            const peer = createPeer(userID, socketRef.current.id, stream);
+                            peersRef.current.push({ peerID: userID, peer });
+                            peersList.push(peer);
+                        });
+                    });
+
+                    socketRef.current.on('user-joined', payload => {
+                        try {
+                            const peer = addPeer(payload.signal, payload.callerID, stream);
+                            peersRef.current.push({ peerID: payload.callerID, peer });
+                        } catch (e) { console.warn(e); }
+                    });
+
+                    socketRef.current.on('receiving-returned-signal', payload => {
+                        const item = peersRef.current.find(p => p.peerID === payload.id);
+                        if(item) {
+                            try { item.peer.signal(payload.signal); } catch(e) { console.warn(e); }
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.warn("Camera failed/blocked, but Editor is still running!", err);
+                    toast.error("Joined without video/audio.");
+                });
         };
 
         if(roomId) init();
@@ -247,19 +249,9 @@ const [inviteCopied, setInviteCopied] = useState(false);
     }, []);
 
     // --- 5. HANDLERS ---
-
     const handleCodeChange = (newCode) => {
         if (isTimeTravelActiveRef.current) return;
-        
-        if (!fileHistoryRef.current[activeFileName]) fileHistoryRef.current[activeFileName] = [];
-        fileHistoryRef.current[activeFileName].push(newCode);
-        
-        codeRef.current = newCode;
-        setFiles(prev => prev.map(f => f.name === activeFileName ? { ...f, value: newCode } : f));
-
-        if (socketRef.current) {
-            socketRef.current.emit(ACTIONS.CODE_CHANGE, { roomId, fileName: activeFileName, code: newCode });
-        }
+        updateFileContent(activeFileName, newCode);
     };
 
     const handleRunCode = () => {
@@ -286,9 +278,7 @@ const [inviteCopied, setInviteCopied] = useState(false);
             savedLiveCodeRef.current = codeRef.current;
             const history = fileHistoryRef.current[activeFileName] || [];
             if(history.length === 0 || history[history.length - 1] !== codeRef.current) history.push(codeRef.current);
-            
             if(history.length === 0) return toast.error("No history yet!");
-            
             setPlaybackIndex(history.length - 1);
             setIsTimeTravelActive(true);
             toast("🔴 Time Travel Active");
@@ -319,14 +309,9 @@ const [inviteCopied, setInviteCopied] = useState(false);
     };
 
     const copyRoomId = async () => {
-        try {
-            await navigator.clipboard.writeText(roomId);
-            toast.success('Room ID copied to clipboard');
-        } catch (err) {
-            toast.error('Could not copy Room ID');
-            console.error(err);
-        }
+        try { await navigator.clipboard.writeText(roomId); toast.success('Room ID copied'); } catch (err) { toast.error('Failed'); }
     };
+    
     const downloadZip = async () => {
         const zip = new JSZip();
         files.forEach(f => zip.file(f.name, f.value));
@@ -334,7 +319,8 @@ const [inviteCopied, setInviteCopied] = useState(false);
         saveAs(content, `CodeSync-Project-${roomId}.zip`);
         toast.success("Downloaded! 📦");
     };
-const handleInvite = async () => {
+    
+    const handleInvite = async () => {
         try {
             await navigator.clipboard.writeText(window.location.href);
             setInviteCopied(true);
@@ -342,6 +328,7 @@ const handleInvite = async () => {
             setTimeout(() => setInviteCopied(false), 2000);
         } catch (err) { toast.error('Failed to copy link'); }
     };
+    
     const saveProject = async () => {
         if (!userId) return toast.error("Guest Mode: Cannot Save.");
         try {
@@ -359,7 +346,7 @@ const handleInvite = async () => {
     // --- 6. RENDER ---
     return (
         <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
-            {/* LEFT SIDEBAR */}
+            {/* SIDEBAR */}
             <aside className="w-80 bg-[#181818] border-r border-[#333] flex flex-col z-20 shrink-0 shadow-2xl">
                 <div className="p-4 border-b border-[#333] flex items-center gap-2">
                     <img className="w-8" src="/code-sync.png" alt="logo" />
@@ -434,15 +421,15 @@ const handleInvite = async () => {
                             {liveRepoUrl && <a href={liveRepoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1 rounded-full text-[10px] font-bold animate-fadeIn hover:bg-green-500/20 transition-all"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span> LIVE ON GITHUB</a>}
                         </div>
                         <button onClick={() => setIsDeployModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95"><span>🚀</span> Deploy</button>
-                      <button 
-    onClick={() => setIsShareModalOpen(true)} 
-    className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"
-    title="Share Code Snippet"
->
-    <Share2 size={14} />
-    <span className="hidden sm:inline">Share</span>
-</button>
-<button 
+                        <button 
+                            onClick={() => setIsShareModalOpen(true)} 
+                            className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"
+                            title="Share Code Snippet"
+                        >
+                            <Share2 size={14} />
+                            <span className="hidden sm:inline">Share</span>
+                        </button>
+                        <button 
                             onClick={handleInvite} 
                             className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                         >
@@ -460,7 +447,7 @@ const handleInvite = async () => {
                     <div className={`flex-1 flex flex-col relative ${activeMainView === 'editor' ? 'flex' : 'hidden'}`}>
                         <div className="flex-1 relative">
                             <Editor 
-                                key={`${activeFileName}-${editorTheme}-${editorFontSize}-${editorFontFamily}-${editorWordWrap}`} 
+                                key={activeFileName} 
                                 socketRef={socketRef} 
                                 roomId={roomId} 
                                 language={files.find(f => f.name === activeFileName)?.language || 'javascript'}
@@ -477,7 +464,6 @@ const handleInvite = async () => {
                                 <input type="range" min="0" max={(fileHistoryRef.current[activeFileName]?.length || 1) - 1} value={playbackIndex} onChange={handleTimeTravelChange} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500 hover:accent-red-400" />
                             </div>
                         )}
-                       
                     </div>
 
                     <div onMouseDown={startResizing} className={`bg-[#1e1e1e] hover:bg-[#007acc] border-[#333] transition-colors z-40 shrink-0 flex items-center justify-center ${layoutMode === 'bottom' ? 'h-2 w-full cursor-row-resize border-t' : 'w-2 h-full cursor-col-resize border-l'}`}>
@@ -520,9 +506,9 @@ const handleInvite = async () => {
 
             {isDeployModalOpen && <DeployModal project={{ title: `Project-${roomId.slice(0, 5)}`, code: files.find(f => f.name === activeFileName)?.value || '', language: files.find(f => f.name === activeFileName)?.language || 'javascript', roomId: roomId }} onSuccess={(url) => setLiveRepoUrl(url)} onClose={() => setIsDeployModalOpen(false)} />}
             {isShareModalOpen && <ShareSnippetModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} code={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language} />}
-            {stream && socketRef.current && <VideoChat socketRef={socketRef} roomId={roomId} stream={stream} />}
+            {/* {stream && socketRef.current && <VideoChat socketRef={socketRef} roomId={roomId} stream={stream} />} */}
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: location.state?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
-      {isResizing && (
+            {isResizing && (
                 <div 
                     className="fixed inset-0 z-[9999] bg-transparent"
                     style={{ 

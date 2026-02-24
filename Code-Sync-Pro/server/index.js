@@ -64,7 +64,10 @@ function getAllConnectedClients(roomId) {
 }
 
 io.on('connection', (socket) => {
-    
+    // 🚨 THE WIRETAP: Catch EVERYTHING coming from the frontend
+    socket.onAny((eventName, ...args) => {
+        console.log(`[WIRETAP] 📡 Caught event from frontend: "${eventName}"`);
+    });
     // 1. JOIN (Updated to Save Collaborators)
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;
@@ -112,14 +115,19 @@ io.on('connection', (socket) => {
     });
 
     // 3. FILE SYSTEM EVENTS
-    socket.on(ACTIONS.FILE_CREATED, ({ roomId, files }) => {
-        socket.to(roomId).emit(ACTIONS.FILE_CREATED, { files });
+   // 3. FILE SYSTEM EVENTS (Make sure this is in server.js!)
+    // Inside server.js
+    // Inside server.js
+   // 3. FILE SYSTEM EVENTS (Using hardcoded strings to bypass the bug)
+    socket.on('file-created', ({ roomId, files }) => {
+        console.log(`🚨 [SERVER] Syncing NEW FILE to room ${roomId}`);
+        socket.to(roomId).emit('file-created', { files });
     });
 
-    socket.on(ACTIONS.FILE_DELETED, ({ roomId, files }) => {
-        socket.to(roomId).emit(ACTIONS.FILE_DELETED, { files });
+    socket.on('file-deleted', ({ roomId, files }) => {
+        console.log(`🚨 [SERVER] Syncing DELETED FILE to room ${roomId}`);
+        socket.to(roomId).emit('file-deleted', { files });
     });
-
     // 4. FEATURES (Chat, Comments)
     socket.on('comment:new', ({ roomId, comment }) => {
         socket.to(roomId).emit('comment:new', comment);

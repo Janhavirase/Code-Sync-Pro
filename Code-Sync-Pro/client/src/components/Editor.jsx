@@ -1,42 +1,35 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { ACTIONS } from '../Actions';
 
+// Note: We removed 'socketRef' and 'roomId' from props because 
+// the parent component (EditorPage) handles the networking now.
 const CodeEditor = ({ 
-    socketRef, 
-    roomId, 
     onCodeChange, 
     code, 
     theme = 'vs-dark', 
     language = 'javascript', 
     onLineSelect, 
-    comments,
     fontSize = 16,
     fontFamily = 'monospace',
     wordWrap = false
 }) => {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
-    const decorationsRef = useRef([]); 
     const [editorLoaded, setEditorLoaded] = useState(false);
 
-    // 🔍 DEBUG: Check if props are actually arriving
-    console.log("EDITOR PROPS RECEIVED:", { theme, fontSize, fontFamily, wordWrap });
-
     function handleEditorDidMount(editor, monaco) {
-        console.log("✅ Editor Mounted!");
+        // console.log("✅ Editor Mounted!");
         editorRef.current = editor;
         monacoRef.current = monaco; 
         setEditorLoaded(true);
 
         // 1. Handle Code Changes
         editor.onDidChangeModelContent((event) => {
+            // 🛑 STOP: Don't emit socket events here. 
+            // Just tell the parent "The code changed".
+            // The parent (EditorPage) will use the Hook to debounce and emit safely.
             const currentCode = editor.getValue();
             onCodeChange(currentCode); 
-            if (event.isFlush) return;
-            if (socketRef.current) {
-                socketRef.current.emit(ACTIONS.CODE_CHANGE, { roomId, code: currentCode });
-            }
         });
 
         // 2. Cursor Tracking
@@ -58,44 +51,20 @@ const CodeEditor = ({
         });
     }
 
-    // Update Code from Parent
-    useEffect(() => {
-        if (editorRef.current && code !== undefined) {
-            const currentEditorValue = editorRef.current.getValue();
-            if (currentEditorValue !== code) {
-                editorRef.current.setValue(code);
-            }
-        }
-    }, [code]);
-
-    // Socket Sync
-    useEffect(() => {
-        if (socketRef.current) {
-            socketRef.current.on(ACTIONS.CODE_CHANGE, ({ code: newCode }) => {
-                if (newCode !== null && editorRef.current && editorRef.current.getValue() !== newCode) {
-                    editorRef.current.setValue(newCode);
-                }
-            });
-        }
-        return () => { if(socketRef.current) socketRef.current.off(ACTIONS.CODE_CHANGE); };
-    }, [socketRef.current]);
-
-    // ✅ FORCE UPDATE OPTIONS (The Nuclear Fix ☢️)
+    // ✅ FORCE UPDATE OPTIONS
     useEffect(() => {
         if (editorRef.current) {
-            console.log("⚡ Forcing Options Update:", { fontSize, fontFamily, wordWrap });
             editorRef.current.updateOptions({
                 fontSize: parseInt(fontSize),
                 fontFamily: fontFamily,
                 wordWrap: wordWrap ? 'on' : 'off'
             });
         }
-    }, [fontSize, fontFamily, wordWrap]); // Run whenever these props change
+    }, [fontSize, fontFamily, wordWrap]); 
 
-    // ✅ THEME DEFINITION
+    // ✅ THEME DEFINITION (Kept your custom logic)
     useEffect(() => {
         if (monacoRef.current && editorLoaded) {
-            console.log("🎨 Applying Theme:", theme);
             const monaco = monacoRef.current;
 
             monaco.editor.defineTheme('dracula', {
@@ -144,7 +113,6 @@ const CodeEditor = ({
             language={language}
             value={code || ""}
             onMount={handleEditorDidMount}
-            // We still pass options here for the initial load
             options={{
                 minimap: { enabled: false },
                 fontSize: parseInt(fontSize),
@@ -160,4 +128,6 @@ const CodeEditor = ({
     );
 };
 
-export default CodeEditor;
+// ✅ IMPORTANT: React.memo prevents the editor from re-rendering 
+// unless the props (code, language, theme) actually change.
+export default React.memo(CodeEditor);
