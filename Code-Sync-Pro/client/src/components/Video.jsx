@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 
 const Video = ({ peer }) => {
     const ref = useRef();
+    const containerRef = useRef();
     const [isVideoScreen, setIsVideoScreen] = useState(false);
 
     useEffect(() => {
         if (!peer) return;
 
-        // 1. Handle incoming WebRTC streams
         const handleStream = (stream) => {
             console.log("👁️ [RECEIVER] Stream attached to video element.");
             if (ref.current) {
@@ -15,34 +15,41 @@ const Video = ({ peer }) => {
             }
         };
 
-        // 2. Initial load
         if (peer.streams && peer.streams[0]) {
             handleStream(peer.streams[0]);
         }
 
         peer.on("stream", handleStream);
 
-        // 3. 🚨 THE "ANTI-FREEZE" FIX 🚨
-        // When the Native Swap happens, the stream doesn't change, but the video DIMENSIONS do!
-        const handleResize = () => {
-            if (ref.current) {
-                const width = ref.current.videoWidth;
-                console.log(`📏 [RECEIVER] Video dimensions changed natively to: ${width}px width`);
-                
-                // If the width jumps to a massive size (like 1080p+), it's the screen share!
-                setIsVideoScreen(width > 1200);
+        // 🚨 ENHANCED ANTI-FREEZE FIX
+        // Inside Video.jsx handleResize function
+const handleResize = () => {
+    if (ref.current) {
+        const width = ref.current.videoWidth;
+        console.log(`📏 [RECEIVER] Dimension update: ${width}px`);
+        
+        setIsVideoScreen(width > 1000);
 
-                // Force the video to keep playing so it doesn't freeze on the transition frame
-                ref.current.play().catch(e => console.error("Play prevented:", e));
-            }
-        };
-
+        // 🚨 THE FORCED RE-BIND: 
+        // If dimensions change but it feels "stuck," reset the srcObject 
+        // to force the browser to re-negotiate the internal buffer.
+        if (width > 0) {
+            const video = ref.current;
+            const stream = video.srcObject;
+            // Poking the video element helps it realize the track changed
+            video.play().catch(() => {
+                video.srcObject = null;
+                video.srcObject = stream;
+                video.play();
+            });
+        }
+    }
+};
         const videoElement = ref.current;
         if (videoElement) {
             videoElement.addEventListener('resize', handleResize);
         }
 
-        // Cleanup
         return () => {
             peer.off("stream", handleStream);
             if (videoElement) {
@@ -51,8 +58,23 @@ const Video = ({ peer }) => {
         };
     }, [peer]);
 
+    const handleDoubleClick = () => {
+        if (!containerRef.current) return;
+        if (!document.fullscreenElement) {
+            containerRef.current.requestFullscreen().catch((err) => {
+                console.error(`Fullscreen Error: ${err.message}`);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    };
+
     return (
-        <div className="relative w-full h-full bg-[#111] group overflow-hidden rounded-lg">
+        <div 
+            ref={containerRef} 
+            onDoubleClick={handleDoubleClick}
+            className="relative w-full h-full bg-[#111] group overflow-hidden rounded-lg cursor-pointer transition-all hover:ring-2 hover:ring-white/20"
+        >
             <video 
                 playsInline 
                 autoPlay 
@@ -62,11 +84,10 @@ const Video = ({ peer }) => {
                 }`} 
             />
             
-            {/* Awesome indicator that User B is looking at a screen share */}
             {isVideoScreen && (
-                <div className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1 z-10 animate-fade-in">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-                    VIEWING SCREEN
+                <div className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow-lg flex items-center gap-1 z-10 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                    SCREEN SHARE
                 </div>
             )}
         </div>

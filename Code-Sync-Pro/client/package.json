@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@monaco-editor/react": "^4.7.0",
+    "@tensorflow/tfjs": "^4.22.0",
     "axios": "^1.13.2",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.34.0",

@@ -30,13 +30,11 @@ import { useCodeRunner } from '../hooks/useCodeRunner';
 import { useVideoCall } from '../hooks/useVideoCall'; 
 
 const EditorPage = () => {
-    // --- 1. SETUP & HOOKS ---
     const { roomId } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
     const socketRef = useRef(null);
     
-    // --- 2. CUSTOM HOOKS ---
     const { layoutMode, setLayoutMode, consoleSize, setConsoleSize, isResizing, startResizing } = useEditorLayout();
     const { output, isCompiling, executeCode, clearOutput } = useCodeRunner();
 
@@ -55,7 +53,6 @@ const EditorPage = () => {
         updateFileContent 
     } = useFileSystem(initialFiles, socketRef, roomId);
 
-    // --- 3. LOCAL STATE ---
     const [clients, setClients] = useState([]);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [editorTheme, setEditorTheme] = useState('dracula');
@@ -84,17 +81,10 @@ const EditorPage = () => {
 
     // ✅ INTEGRATE VIDEO HOOK
     const { 
-        stream, 
-        isCallActive, 
-        isScreenSharing, 
-        isMuted, 
-        isVideoOff, 
-        startCall, 
-        endCall, 
-        startScreenShare, 
-        endScreenShare,
-        toggleMic,
-        toggleVideo 
+        stream, isCallActive, isScreenSharing, isMuted, isVideoOff, 
+        startCall, endCall, startScreenShare, endScreenShare,
+        toggleMic, toggleVideo, isBlurred, isRecording,
+        toggleBlur, startRecording, stopRecording, getNetworkStats
     } = useVideoCall(socketRef, roomId, peersRef);
 
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
@@ -103,9 +93,6 @@ const EditorPage = () => {
     const userId = location.state?.userId || user?.user?._id || user?._id || user?.id;
     const isHost = location.state?.isHost || !!userId;
 
-    // --- 4. EFFECTS ---
-
-    // Web Preview Logic
     useEffect(() => {
         const timeout = setTimeout(() => {
             const htmlFile = files.find(f => f.name === 'index.html') || files.find(f => f.name.endsWith('.html'));
@@ -119,7 +106,10 @@ const EditorPage = () => {
     }, [files]);
 
     useEffect(() => { isTimeTravelActiveRef.current = isTimeTravelActive; }, [isTimeTravelActive]);
-// --- SOCKET INITIALIZATION ---
+
+    // ---------------------------------------------------------
+    // 🛡️ ENHANCED SOCKET INITIALIZATION
+    // ---------------------------------------------------------
     useEffect(() => {
         const init = async () => {
             socketRef.current = await initSocket();
@@ -135,42 +125,39 @@ const EditorPage = () => {
                 setClients(clients);
             });
 
-            // ✅ 1. INVITATION LISTENER (Receiver Side)
+            // 1. Invitation Listener (Receiver Side)
             socketRef.current.on('server:invite-call', ({ from, callerId }) => {
                 toast((t) => (
-                    <div className="flex flex-col gap-2">
-                        <span><b>{from}</b> is inviting you to a video call...</span>
-                        <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 p-1">
+                        <span className="text-sm font-semibold">Incoming Call</span>
+                        <span className="text-xs"><b>{from}</b> is inviting you...</span>
+                        <div className="flex gap-2 mt-1">
                             <button 
-                                className="bg-green-600 px-3 py-1 rounded text-xs font-bold hover:bg-green-500"
+                                className="bg-green-600 px-3 py-1 rounded text-xs font-bold hover:bg-green-500 transition-all"
                                 onClick={async () => {
                                     toast.dismiss(t.id);
-                                    // First, turn on local camera
                                     await startCall(); 
-                                    // Then, tell the caller you are ready to handshake
                                     socketRef.current.emit('client:accept-call', { roomId, callerId });
                                 }}
                             >Accept</button>
                             <button 
-                                className="bg-red-600 px-3 py-1 rounded text-xs font-bold hover:bg-red-500" 
+                                className="bg-red-600 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 transition-all" 
                                 onClick={() => toast.dismiss(t.id)}
                             >Reject</button>
                         </div>
                     </div>
-                ), { duration: 10000, position: 'top-center' });
+                ), { duration: 15000, position: 'top-center', style: { background: '#1e1e1e', color: '#fff', border: '1px solid #333'} });
             });
 
-            // ✅ 2. PREPARE STREAM (Triggered for Receiver after clicking Accept)
+            // 2. Prepare Stream
             socketRef.current.on('server:prepare-local-stream', () => {
-                // This ensures the receiver's camera is active before peers are created
                 startCall(); 
             });
 
-            // ✅ 3. CALL ACCEPTED (Caller Side)
-            // When the receiver accepts, the CALLER gets this event to start Peer creation
-            socketRef.current.on('server:call-accepted', ({ signalTarget }) => {
-                // This tells VideoChat.jsx to run the 'request-call-join' logic
-                // which finally triggers the 'all-users' handshake
+            // 3. Call Accepted Handshake (Both Sides)
+            socketRef.current.on('server:call-accepted', () => {
+                console.log("✅ Call Accepted! Initiating simple-peer handshake...");
+                // Both peers must emit this to scan the room and create peer connections
                 socketRef.current.emit('request-call-join', { roomId });
             });
 
@@ -201,6 +188,7 @@ const EditorPage = () => {
             socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
                 toast.success(`${username} left.`);
                 setClients(prev => prev.filter(c => c.socketId !== socketId));
+                // Cleanup peer
                 const peerObj = peersRef.current.find(p => p.peerID === socketId);
                 if(peerObj) peerObj.peer.destroy();
                 peersRef.current = peersRef.current.filter(p => p.peerID !== socketId);
@@ -212,21 +200,20 @@ const EditorPage = () => {
             if(socketRef.current) socketRef.current.disconnect();
             if(stream) stream.getTracks().forEach(track => track.stop());
         };
-    }, [roomId]); // Added roomId to dependency array
+    }, [roomId]); 
 
     // --- 5. HANDLERS ---
     
-    // ✅ NEW: HANDLE INVITATION
- const handleInviteCall = () => {
-    if (socketRef.current && !isCallActive) { // Added !isCallActive check
-        socketRef.current.emit('client:invite-call', { 
-            roomId, 
-            username: user?.username || 'Someone' 
-        });
-        startCall(); 
-        toast.success("Invitation sent to peers");
-    }
-};
+    const handleInviteCall = () => {
+        if (socketRef.current && !isCallActive) {
+            socketRef.current.emit('client:invite-call', { 
+                roomId, 
+                username: user?.username || 'Someone' 
+            });
+            startCall(); 
+            toast.success("Call invitation sent!");
+        }
+    };
 
     const handleCodeChange = (newCode) => {
         if (isTimeTravelActiveRef.current) return;
@@ -296,7 +283,7 @@ const EditorPage = () => {
         files.forEach(f => zip.file(f.name, f.value));
         const content = await zip.generateAsync({ type: "blob" });
         saveAs(content, `CodeSync-Project-${roomId}.zip`);
-        toast.success("Downloaded! 📦");
+        toast.success("Downloaded Project!");
     };
     
     const handleInvite = async () => {
@@ -316,7 +303,7 @@ const EditorPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roomId, name: `Project ${roomId.slice(0, 4)}`, userId, files })
             });
-            res.ok ? toast.success('Saved! 💾') : toast.error('Save failed.');
+            res.ok ? toast.success('Saved Successfully!') : toast.error('Save failed.');
         } catch (error) { toast.error('Server error.'); }
     };
 
@@ -347,7 +334,7 @@ const EditorPage = () => {
                             {isCreatingFile && (
                                 <div className="flex items-center px-2 mb-2 animate-fadeIn">
                                     <span className="text-gray-400 mr-1">📄</span>
-                                    <input autoFocus className="bg-[#333] text-white text-xs p-1 rounded w-full border border-blue-500" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFile(); if (e.key === 'Escape') setIsCreatingFile(false); }} onBlur={() => setIsCreatingFile(false)} placeholder="index.html" />
+                                    <input autoFocus className="bg-[#333] text-white text-xs p-1 rounded w-full border border-blue-500 outline-none" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFile(); if (e.key === 'Escape') setIsCreatingFile(false); }} onBlur={() => setIsCreatingFile(false)} placeholder="filename.js" />
                                 </div>
                             )}
                             {files.map((file, index) => (
@@ -356,24 +343,22 @@ const EditorPage = () => {
                                     <button onClick={(e) => deleteFileHandler(e, file.name)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity p-1 rounded hover:bg-[#252526]">🗑</button>
                                 </div>
                             ))}
-                            <button onClick={() => setActiveSidebarTab('comments')} className="mt-4 p-2 text-left rounded text-sm text-gray-400 hover:bg-[#2a2d2e] border-t border-[#333] flex gap-2 w-full">📝 View Comments ({comments.length})</button>
                         </div>
                     )}
                     {activeSidebarTab === 'users' && <div className="grid grid-cols-3 gap-3 p-2">{clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}</div>}
                     {activeSidebarTab === 'chat' && <div className="h-full flex flex-col"><Chat socketRef={socketRef} roomId={roomId} username={user?.username} /></div>}
                     {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
-                    {activeSidebarTab === 'comments' && <CommentsPanel comments={comments} activeLine={activeLine} onAddComment={handleAddComment} />}
                 </div>
 
                 <div className="p-4 border-t border-[#333] flex flex-col gap-2 bg-[#181818]">
-                    <button className="btn bg-[#333] hover:bg-[#444] text-white py-2 rounded text-sm" onClick={() => setShowQR(!showQR)}>{showQR ? 'Hide QR' : 'Show QR'}</button>
-                    {showQR && <div className="p-2 bg-white rounded flex justify-center"><QRCode value={roomId} size={100} /></div>}
+                    <button className="btn bg-[#333] hover:bg-[#444] text-white py-2 rounded text-sm transition-colors" onClick={() => setShowQR(!showQR)}>{showQR ? 'Hide QR' : 'Show QR'}</button>
+                    {showQR && <div className="p-2 bg-white rounded flex justify-center animate-fadeIn"><QRCode value={roomId} size={100} /></div>}
                     <div className="flex gap-2">
-                        <button className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded text-sm font-bold" onClick={copyRoomId}>Copy ID</button>
-                        <button className="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-bold" onClick={() => navigate('/')}>Leave</button>
+                        <button className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded text-sm font-bold transition-all" onClick={copyRoomId}>Copy ID</button>
+                        <button className="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-bold transition-all" onClick={() => navigate('/')}>Leave</button>
                     </div>
                 </div>
-                <div className="p-2 border-t border-[#333]"><button onClick={() => setIsSettingsOpen(true)} className="w-full p-3 flex items-center gap-3 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded transition-colors"><span className="text-xl">⚙️</span><span className="text-sm font-bold">Settings</span></button></div>
+                <div className="p-2 border-t border-[#333]"><button onClick={() => setIsSettingsOpen(true)} className="w-full p-3 flex items-center gap-3 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded transition-colors"><Settings size={18}/><span className="text-sm font-bold">Settings</span></button></div>
             </aside>
 
             {/* MAIN AREA */}
@@ -382,8 +367,8 @@ const EditorPage = () => {
                     <div className="flex gap-2 items-center">
                         <button onClick={() => navigate('/dashboard', { state: { user: user || getSavedUser() } })} className="text-gray-400 hover:text-white flex items-center gap-1 text-xs transition-colors mr-4">⬅ Dashboard</button>
                         <div className="flex bg-[#252526] rounded-md p-1 border border-[#333]">
-                            <button onClick={() => setActiveMainView('editor')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'editor' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>&lt;/&gt; Code</button>
-                            <button onClick={() => setActiveMainView('board')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'board' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>🎨 Whiteboard</button>
+                            <button onClick={() => setActiveMainView('editor')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'editor' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Code</button>
+                            <button onClick={() => setActiveMainView('board')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'board' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Whiteboard</button>
                         </div>
                     </div>
                     
@@ -393,18 +378,17 @@ const EditorPage = () => {
                     </div>
 
                     <div className="flex gap-3">
-                        {/* ✅ REPLACED: NEW INVITATION BUTTON */}
                         {clients.length > 1 && !isCallActive && (
                              <button 
                                 onClick={handleInviteCall} 
-                                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-sm text-xs font-bold transition-all animate-pulse"
+                                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-sm text-xs font-bold transition-all animate-pulse shadow-lg"
                             >
                                 <Video size={14} /> Invite to Call
                              </button>
                         )}
 
                         {isCallActive && (
-                            <div className="flex items-center gap-1 bg-[#252526] p-1 rounded-sm border border-indigo-500">
+                            <div className="flex items-center gap-1 bg-[#252526] p-1 rounded-sm border border-indigo-500 animate-fadeIn">
                                 <button onClick={isScreenSharing ? endScreenShare : startScreenShare} className={`p-1 rounded ${isScreenSharing ? 'text-green-400' : 'text-gray-400 hover:text-white'}`} title="Screen Share">
                                     <Monitor size={14} />
                                 </button>
@@ -415,27 +399,10 @@ const EditorPage = () => {
                         )}
 
                         <button onClick={toggleTimeTravel} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${isTimeTravelActive ? 'bg-red-600 animate-pulse' : 'bg-yellow-600 hover:bg-yellow-700'}`}>{isTimeTravelActive ? 'Exit Replay' : '🕒 History'}</button>
-                        <div className="flex items-center gap-3">
-                            {liveRepoUrl && <a href={liveRepoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1 rounded-full text-[10px] font-bold animate-fadeIn hover:bg-green-500/20 transition-all"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span> LIVE ON GITHUB</a>}
-                        </div>
-                        <button onClick={() => setIsDeployModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95"><span>🚀</span> Deploy</button>
-                        <button 
-                            onClick={() => setIsShareModalOpen(true)} 
-                            className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"
-                            title="Share Code Snippet"
-                        >
-                            <Share2 size={14} />
-                            <span className="hidden sm:inline">Share</span>
-                        </button>
-                        <button 
-                            onClick={handleInvite} 
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-                        >
-                            {inviteCopied ? <Check size={14} /> : <UserPlus size={14} />}
-                            <span className="hidden sm:inline">{inviteCopied ? 'Copied' : 'Invite'}</span>
-                        </button>
-                        <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 transition-colors">📥 Download</button>
-                        {isHost && <button className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600" onClick={saveProject}>💾 Save</button>}
+                        <button onClick={() => setIsDeployModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95">Deploy</button>
+                        <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
+                        <button onClick={handleInvite} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{inviteCopied ? <Check size={14} /> : <UserPlus size={14} />} {inviteCopied ? 'Copied' : 'Invite'}</button>
+                        <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600">📥 Download</button>
                         <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isCompiling ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isCompiling}>{isCompiling ? 'Running...' : '▶ Run'}</button>
                     </div>
                 </div>
@@ -468,23 +435,23 @@ const EditorPage = () => {
                         <div className={`bg-gray-600 rounded-full ${layoutMode === 'bottom' ? 'w-10 h-1' : 'h-10 w-1'}`}></div>
                     </div>
 
-                    <div className="bg-[#1e1e1e] flex flex-col z-30 shrink-0 relative" style={{ height: layoutMode === 'bottom' ? `${consoleSize}px` : 'auto', width: layoutMode === 'side' ? `${consoleSize}px` : 'auto' }}>
+                    <div className="bg-[#1e1e1e] flex flex-col z-30 shrink-0 relative shadow-inner" style={{ height: layoutMode === 'bottom' ? `${consoleSize}px` : 'auto', width: layoutMode === 'side' ? `${consoleSize}px` : 'auto' }}>
                         <div className="flex justify-between items-center bg-[#252526] border-b border-[#333]">
                             <div className="flex">
-                                <button onClick={() => setActiveBottomTab('console')} className={`px-4 py-1 text-xs font-bold uppercase transition-colors ${activeBottomTab === 'console' ? 'text-white border-b-2 border-blue-500 bg-[#1e1e1e]' : 'text-gray-500 hover:text-gray-300'}`}>Console (Stdin/Stdout)</button>
-                                <button onClick={() => setActiveBottomTab('preview')} className={`px-4 py-1 text-xs font-bold uppercase transition-colors ${activeBottomTab === 'preview' ? 'text-white border-b-2 border-orange-500 bg-[#1e1e1e]' : 'text-gray-500 hover:text-gray-300'}`}>🌐 Web Preview</button>
+                                <button onClick={() => setActiveBottomTab('console')} className={`px-4 py-1 text-xs font-bold uppercase transition-colors ${activeBottomTab === 'console' ? 'text-white border-b-2 border-blue-500 bg-[#1e1e1e]' : 'text-gray-400 hover:text-gray-200'}`}>Console</button>
+                                <button onClick={() => setActiveBottomTab('preview')} className={`px-4 py-1 text-xs font-bold uppercase transition-colors ${activeBottomTab === 'preview' ? 'text-white border-b-2 border-orange-500 bg-[#1e1e1e]' : 'text-gray-400 hover:text-gray-200'}`}>Preview</button>
                             </div>
-                            <button onClick={() => setOutput("")} className="px-4 text-xs text-gray-500 hover:text-gray-300">Clear</button>
+                            <button onClick={() => setOutput("")} className="px-4 text-xs text-gray-500 hover:text-gray-300 transition-colors">Clear</button>
                         </div>
-                        <div className="flex-1 flex overflow-hidden relative">
+                        <div className="flex-1 flex overflow-hidden relative bg-[#1e1e1e]">
                             <div className={`flex w-full h-full ${activeBottomTab === 'console' ? 'flex' : 'hidden'}`}>
                                 <div className="w-1/2 border-r border-[#333] flex flex-col">
-                                    <div className="bg-[#1e1e1e] px-2 py-0.5 text-[10px] text-gray-500 uppercase">Input (stdin)</div>
-                                    <textarea className="flex-1 bg-[#1e1e1e] text-gray-300 p-2 text-sm font-mono outline-none resize-none" placeholder="Input..." value={customInput} onChange={(e) => setCustomInput(e.target.value)} />
+                                    <div className="bg-[#252526] px-2 py-0.5 text-[9px] text-gray-500 uppercase tracking-tighter">Stdin</div>
+                                    <textarea className="flex-1 bg-[#1e1e1e] text-gray-300 p-2 text-sm font-mono outline-none resize-none" placeholder="Input here..." value={customInput} onChange={(e) => setCustomInput(e.target.value)} />
                                 </div>
                                 <div className="w-1/2 flex flex-col">
-                                    <div className="bg-[#1e1e1e] px-2 py-0.5 text-[10px] text-gray-500 uppercase">Output</div>
-                                    <pre className={`flex-1 p-2 text-sm font-mono overflow-auto whitespace-pre-wrap ${output.includes("Error") ? "text-red-400" : "text-gray-300"}`}>{output || <span className="text-gray-600 italic">Run code...</span>}</pre>
+                                    <div className="bg-[#252526] px-2 py-0.5 text-[9px] text-gray-500 uppercase tracking-tighter">Stdout</div>
+                                    <pre className={`flex-1 p-2 text-xs font-mono overflow-auto whitespace-pre-wrap ${output.includes("Error") ? "text-red-400" : "text-blue-300"}`}>{output || "..."}</pre>
                                 </div>
                             </div>
                             <div className={`w-full h-full bg-white ${activeBottomTab === 'preview' ? 'block' : 'hidden'}`}>
@@ -494,7 +461,7 @@ const EditorPage = () => {
                     </div>
                 </div>
 
-                <div className={`absolute inset-0 z-40 bg-white h-full w-full overflow-hidden ${activeMainView === 'board' ? 'visible opacity-100 pointer-events-auto' : 'invisible opacity-0 pointer-events-none'}`}>
+                <div className={`absolute inset-0 z-40 bg-white h-full w-full overflow-hidden transition-all duration-500 ${activeMainView === 'board' ? 'visible opacity-100 pointer-events-auto scale-100' : 'invisible opacity-0 pointer-events-none scale-95'}`}>
                     <div className="absolute top-4 left-4 z-50">
                         <button onClick={() => setActiveMainView('editor')} className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded shadow-xl flex items-center gap-2 transition-all">⬅ Back to Code</button>
                     </div>
@@ -502,16 +469,20 @@ const EditorPage = () => {
                 </div>
             </main>
 
-            {isDeployModalOpen && <DeployModal project={{ title: `Project-${roomId.slice(0, 5)}`, code: files.find(f => f.name === activeFileName)?.value || '', language: files.find(f => f.name === activeFileName)?.language || 'javascript', roomId: roomId }} onSuccess={(url) => setLiveRepoUrl(url)} onClose={() => setIsDeployModalOpen(false)} />}
-            {isShareModalOpen && <ShareSnippetModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} code={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language} />}
-            
             {isCallActive && stream && (
                 <VideoChat 
+                key="persistent-video-chat"
                     socketRef={socketRef} 
                     roomId={roomId} 
                     stream={stream}
                     isScreenSharing={isScreenSharing}
                     isMuted={isMuted}
+                    isBlurred={isBlurred}
+                    toggleBlur={toggleBlur}
+                    isRecording={isRecording}
+                    startRecording={startRecording}
+                    stopRecording={stopRecording}
+                    getNetworkStats={getNetworkStats}
                     peersRef={peersRef}
                     isVideoOff={isVideoOff}
                     clients={clients}
@@ -523,15 +494,6 @@ const EditorPage = () => {
             )}
             
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: user?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
-            {isResizing && (
-                <div 
-                    className="fixed inset-0 z-[9999] bg-transparent"
-                    style={{ 
-                        cursor: layoutMode === 'bottom' ? 'row-resize' : 'col-resize',
-                        userSelect: 'none'
-                    }}
-                />
-            )}
         </div>
     );
 };
