@@ -20,13 +20,14 @@ import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, 
     Settings, Play, Loader2, Download, Share2, 
-    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check
+    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff
 } from 'lucide-react';
 
 // ✅ IMPORT CUSTOM HOOKS
 import useEditorLayout from '../hooks/useEditorLayout';
 import useFileSystem from '../hooks/useFileSystem';
-import useCodeRunner from '../hooks/useCodeRunner';
+import { useCodeRunner } from '../hooks/useCodeRunner';
+import { useVideoCall } from '../hooks/useVideoCall'; 
 
 const EditorPage = () => {
     // --- 1. SETUP & HOOKS ---
@@ -37,7 +38,8 @@ const EditorPage = () => {
     
     // --- 2. CUSTOM HOOKS ---
     const { layoutMode, setLayoutMode, consoleSize, setConsoleSize, isResizing, startResizing } = useEditorLayout();
-    
+    const { output, isCompiling, executeCode, clearOutput } = useCodeRunner();
+
     const initialFiles = location.state?.templateFiles || [
         { name: 'main.js', language: 'javascript', value: '// Write JS here\nconsole.log("Hello World");' },
         { name: 'index.html', language: 'html', value: '\n<div class="container">\n  <h1>Hello World 🌍</h1>\n  <p>Live Preview Active!</p>\n</div>' },
@@ -45,13 +47,13 @@ const EditorPage = () => {
         { name: 'script.js', language: 'javascript', value: 'console.log("Loaded script.js");' }
     ];
 
+    const [customInput, setCustomInput] = useState("");
+
     const { 
         files, setFiles, activeFileName, setActiveFileName, activeFileNameRef, 
         codeRef, fileHistoryRef, switchFile, createNewFile, deleteFile, 
         updateFileContent 
     } = useFileSystem(initialFiles, socketRef, roomId);
-
-    const { output, setOutput, isRunning, customInput, setCustomInput, runCode } = useCodeRunner();
 
     // --- 3. LOCAL STATE ---
     const [clients, setClients] = useState([]);
@@ -76,14 +78,24 @@ const EditorPage = () => {
     const [playbackIndex, setPlaybackIndex] = useState(0);
     const savedLiveCodeRef = useRef(null); 
     const isTimeTravelActiveRef = useRef(false);
-    const [stream, setStream] = useState(null);
     const [isSocketConnected, setIsSocketConnected] = useState(false);
-    const peersRef = useRef([]);
-    const userVideo = useRef();
-    const userStream = useRef();
-    const [isMuted, setIsMuted] = useState(false);
-    const [isVideoOff, setIsVideoOff] = useState(false);
+    const peersRef = useRef([]); 
     const [inviteCopied, setInviteCopied] = useState(false);
+
+    // ✅ INTEGRATE VIDEO HOOK
+    const { 
+        stream, 
+        isCallActive, 
+        isScreenSharing, 
+        isMuted, 
+        isVideoOff, 
+        startCall, 
+        endCall, 
+        startScreenShare, 
+        endScreenShare,
+        toggleMic,
+        toggleVideo 
+    } = useVideoCall(socketRef, roomId, peersRef);
 
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
     const savedUser = getSavedUser();
@@ -92,11 +104,6 @@ const EditorPage = () => {
     const isHost = location.state?.isHost || !!userId;
 
     // --- 4. EFFECTS ---
-    useEffect(() => {
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then((currentStream) => { setStream(currentStream); })
-            .catch(err => console.error("Media Error:", err));
-    }, []);
 
     // Web Preview Logic
     useEffect(() => {
@@ -112,25 +119,62 @@ const EditorPage = () => {
     }, [files]);
 
     useEffect(() => { isTimeTravelActiveRef.current = isTimeTravelActive; }, [isTimeTravelActive]);
-
-    // --- SOCKET INITIALIZATION ---
+// --- SOCKET INITIALIZATION ---
     useEffect(() => {
         const init = async () => {
             socketRef.current = await initSocket();
             setIsSocketConnected(true);
 
-            // ✅ 1. INSTANTLY JOIN ROOM
-            socketRef.current.emit(ACTIONS.JOIN, { roomId, username: location.state?.username || user?.username });
+            socketRef.current.emit(ACTIONS.JOIN, { roomId, username: user?.username });
 
             socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
-                if (username !== (location.state?.username || user?.username)) {
+                if (username !== user?.username) {
                     toast.success(`${username} joined.`);
                     socketRef.current.emit(ACTIONS.SYNC_CODE, { files, socketId });
                 }
                 setClients(clients);
             });
 
-            // ✅ 2. INSTANTLY ATTACH FILE SYNC LISTENERS (No more waiting for the camera!)
+            // ✅ 1. INVITATION LISTENER (Receiver Side)
+            socketRef.current.on('server:invite-call', ({ from, callerId }) => {
+                toast((t) => (
+                    <div className="flex flex-col gap-2">
+                        <span><b>{from}</b> is inviting you to a video call...</span>
+                        <div className="flex gap-2">
+                            <button 
+                                className="bg-green-600 px-3 py-1 rounded text-xs font-bold hover:bg-green-500"
+                                onClick={async () => {
+                                    toast.dismiss(t.id);
+                                    // First, turn on local camera
+                                    await startCall(); 
+                                    // Then, tell the caller you are ready to handshake
+                                    socketRef.current.emit('client:accept-call', { roomId, callerId });
+                                }}
+                            >Accept</button>
+                            <button 
+                                className="bg-red-600 px-3 py-1 rounded text-xs font-bold hover:bg-red-500" 
+                                onClick={() => toast.dismiss(t.id)}
+                            >Reject</button>
+                        </div>
+                    </div>
+                ), { duration: 10000, position: 'top-center' });
+            });
+
+            // ✅ 2. PREPARE STREAM (Triggered for Receiver after clicking Accept)
+            socketRef.current.on('server:prepare-local-stream', () => {
+                // This ensures the receiver's camera is active before peers are created
+                startCall(); 
+            });
+
+            // ✅ 3. CALL ACCEPTED (Caller Side)
+            // When the receiver accepts, the CALLER gets this event to start Peer creation
+            socketRef.current.on('server:call-accepted', ({ signalTarget }) => {
+                // This tells VideoChat.jsx to run the 'request-call-join' logic
+                // which finally triggers the 'all-users' handshake
+                socketRef.current.emit('request-call-join', { roomId });
+            });
+
+            // --- Standard Editor Listeners ---
             socketRef.current.on(ACTIONS.FILE_CREATED, ({ files: remoteFiles }) => {
                 setFiles(curr => {
                     const next = [...curr];
@@ -139,7 +183,6 @@ const EditorPage = () => {
                     });
                     return next;
                 });
-                toast.success("New file created by peer");
             });
 
             socketRef.current.on(ACTIONS.FILE_DELETED, ({ files: updatedFiles }) => {
@@ -148,19 +191,11 @@ const EditorPage = () => {
                 if (!updatedFiles.some(f => f.name === current) && updatedFiles.length > 0) {
                     setActiveFileName(updatedFiles[0].name);
                     codeRef.current = updatedFiles[0].value;
-                    toast("File deleted by peer");
                 }
             });
 
             socketRef.current.on(ACTIONS.SYNC_CODE, ({ files: syncedFiles }) => {
-                if (syncedFiles && syncedFiles.length > 0) {
-                    setFiles(syncedFiles);
-                    const current = activeFileNameRef.current;
-                    if (!syncedFiles.find(f => f.name === current)) {
-                        setActiveFileName(syncedFiles[0].name);
-                        codeRef.current = syncedFiles[0].value;
-                    }
-                }
+                if (syncedFiles && syncedFiles.length > 0) setFiles(syncedFiles);
             });
 
             socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
@@ -170,94 +205,38 @@ const EditorPage = () => {
                 if(peerObj) peerObj.peer.destroy();
                 peersRef.current = peersRef.current.filter(p => p.peerID !== socketId);
             });
-
-            socketRef.current.on('comment:new', (newComment) => {
-                setComments(prev => [...prev, newComment]);
-                toast("New comment added", { icon: '💬' });
-            });
-
-            // ✅ 3. HANDLE CAMERA IN THE BACKGROUND (Using .then() instead of await)
-            const rtcConfig = {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                ]
-            };
-
-            function createPeer(userToSignal, callerID, stream) {
-                const peer = new Peer({ initiator: true, trickle: false, stream, config: rtcConfig });
-                peer.on('signal', signal => socketRef.current.emit('sending-signal', { userToSignal, callerID, signal }));
-                peer.on('error', err => console.warn("Peer error:", err));
-                return peer;
-            }
-
-            function addPeer(incomingSignal, callerID, stream) {
-                const peer = new Peer({ initiator: false, trickle: false, stream, config: rtcConfig });
-                peer.on('signal', signal => socketRef.current.emit('returning-signal', { signal, callerID }));
-                peer.signal(incomingSignal);
-                peer.on('error', err => console.warn("Peer error:", err));
-                return peer;
-            }
-
-            // This runs silently in the background and won't block the editor!
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                .then(stream => {
-                    userStream.current = stream;
-                    if (userVideo.current) {
-                        userVideo.current.srcObject = stream;
-                        userVideo.current.muted = true;
-                    }
-                    
-                    socketRef.current.on('all-users', users => {
-                        const peersList = [];
-                        users.forEach(userID => {
-                            const peer = createPeer(userID, socketRef.current.id, stream);
-                            peersRef.current.push({ peerID: userID, peer });
-                            peersList.push(peer);
-                        });
-                    });
-
-                    socketRef.current.on('user-joined', payload => {
-                        try {
-                            const peer = addPeer(payload.signal, payload.callerID, stream);
-                            peersRef.current.push({ peerID: payload.callerID, peer });
-                        } catch (e) { console.warn(e); }
-                    });
-
-                    socketRef.current.on('receiving-returned-signal', payload => {
-                        const item = peersRef.current.find(p => p.peerID === payload.id);
-                        if(item) {
-                            try { item.peer.signal(payload.signal); } catch(e) { console.warn(e); }
-                        }
-                    });
-                })
-                .catch(err => {
-                    console.warn("Camera failed/blocked, but Editor is still running!", err);
-                    toast.error("Joined without video/audio.");
-                });
         };
 
         if(roomId) init();
         return () => {
             if(socketRef.current) socketRef.current.disconnect();
-            if(userStream.current) userStream.current.getTracks().forEach(track => track.stop());
+            if(stream) stream.getTracks().forEach(track => track.stop());
         };
-    }, []);
+    }, [roomId]); // Added roomId to dependency array
 
     // --- 5. HANDLERS ---
+    
+    // ✅ NEW: HANDLE INVITATION
+ const handleInviteCall = () => {
+    if (socketRef.current && !isCallActive) { // Added !isCallActive check
+        socketRef.current.emit('client:invite-call', { 
+            roomId, 
+            username: user?.username || 'Someone' 
+        });
+        startCall(); 
+        toast.success("Invitation sent to peers");
+    }
+};
+
     const handleCodeChange = (newCode) => {
         if (isTimeTravelActiveRef.current) return;
         updateFileContent(activeFileName, newCode);
     };
 
     const handleRunCode = () => {
-        const file = files.find(f => f.name === activeFileName);
-        setActiveBottomTab('console');
-        runCode(file, codeRef.current, customInput);
+        const currentFile = files.find(f => f.name === activeFileName);
+        const codeString = currentFile?.value || '';
+        executeCode(codeString, currentFile?.language || 'javascript'); 
     };
 
     const handleSwitchFile = (name) => {
@@ -268,7 +247,7 @@ const EditorPage = () => {
     };
 
     const handleAddComment = (text, line) => {
-        const newComment = { username: location.state?.username || user?.username || 'Guest', text, line, timestamp: Date.now() };
+        const newComment = { username: user?.username || 'Guest', text, line, timestamp: Date.now() };
         setComments(prev => [...prev, newComment]);
         if(socketRef.current) socketRef.current.emit('comment:new', { roomId, comment: newComment });
     };
@@ -343,7 +322,6 @@ const EditorPage = () => {
 
     if (!location.state && !userId) return <Navigate to="/" state={{ roomId }} />;
 
-    // --- 6. RENDER ---
     return (
         <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
             {/* SIDEBAR */}
@@ -382,7 +360,7 @@ const EditorPage = () => {
                         </div>
                     )}
                     {activeSidebarTab === 'users' && <div className="grid grid-cols-3 gap-3 p-2">{clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}</div>}
-                    {activeSidebarTab === 'chat' && <div className="h-full flex flex-col"><Chat socketRef={socketRef} roomId={roomId} username={location.state?.username || user?.username} /></div>}
+                    {activeSidebarTab === 'chat' && <div className="h-full flex flex-col"><Chat socketRef={socketRef} roomId={roomId} username={user?.username} /></div>}
                     {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
                     {activeSidebarTab === 'comments' && <CommentsPanel comments={comments} activeLine={activeLine} onAddComment={handleAddComment} />}
                 </div>
@@ -409,13 +387,33 @@ const EditorPage = () => {
                         </div>
                     </div>
                     
-                    {/* LAYOUT TOGGLE */}
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setLayoutMode('bottom'); setConsoleSize(250); }} className={`p-1 rounded ${layoutMode === 'bottom' ? 'text-blue-400' : 'text-gray-500'}`} title="Bottom Console">⬇️</button>
                         <button onClick={() => { setLayoutMode('side'); setConsoleSize(400); }} className={`p-1 rounded ${layoutMode === 'side' ? 'text-blue-400' : 'text-gray-500'}`} title="Side Console">➡️</button>
                     </div>
 
                     <div className="flex gap-3">
+                        {/* ✅ REPLACED: NEW INVITATION BUTTON */}
+                        {clients.length > 1 && !isCallActive && (
+                             <button 
+                                onClick={handleInviteCall} 
+                                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-sm text-xs font-bold transition-all animate-pulse"
+                            >
+                                <Video size={14} /> Invite to Call
+                             </button>
+                        )}
+
+                        {isCallActive && (
+                            <div className="flex items-center gap-1 bg-[#252526] p-1 rounded-sm border border-indigo-500">
+                                <button onClick={isScreenSharing ? endScreenShare : startScreenShare} className={`p-1 rounded ${isScreenSharing ? 'text-green-400' : 'text-gray-400 hover:text-white'}`} title="Screen Share">
+                                    <Monitor size={14} />
+                                </button>
+                                <button onClick={endCall} className="p-1 text-red-500 hover:text-red-400" title="End Call">
+                                    <PhoneOff size={14} />
+                                </button>
+                            </div>
+                        )}
+
                         <button onClick={toggleTimeTravel} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${isTimeTravelActive ? 'bg-red-600 animate-pulse' : 'bg-yellow-600 hover:bg-yellow-700'}`}>{isTimeTravelActive ? 'Exit Replay' : '🕒 History'}</button>
                         <div className="flex items-center gap-3">
                             {liveRepoUrl && <a href={liveRepoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 px-3 py-1 rounded-full text-[10px] font-bold animate-fadeIn hover:bg-green-500/20 transition-all"><span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span> LIVE ON GITHUB</a>}
@@ -438,7 +436,7 @@ const EditorPage = () => {
                         </button>
                         <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white border border-blue-500 transition-colors">📥 Download</button>
                         {isHost && <button className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600" onClick={saveProject}>💾 Save</button>}
-                        <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isRunning ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isRunning}>{isRunning ? 'Running...' : '▶ Run'}</button>
+                        <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isCompiling ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isCompiling}>{isCompiling ? 'Running...' : '▶ Run'}</button>
                     </div>
                 </div>
 
@@ -506,8 +504,25 @@ const EditorPage = () => {
 
             {isDeployModalOpen && <DeployModal project={{ title: `Project-${roomId.slice(0, 5)}`, code: files.find(f => f.name === activeFileName)?.value || '', language: files.find(f => f.name === activeFileName)?.language || 'javascript', roomId: roomId }} onSuccess={(url) => setLiveRepoUrl(url)} onClose={() => setIsDeployModalOpen(false)} />}
             {isShareModalOpen && <ShareSnippetModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} code={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language} />}
-            {/* {stream && socketRef.current && <VideoChat socketRef={socketRef} roomId={roomId} stream={stream} />} */}
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: location.state?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
+            
+            {isCallActive && stream && (
+                <VideoChat 
+                    socketRef={socketRef} 
+                    roomId={roomId} 
+                    stream={stream}
+                    isScreenSharing={isScreenSharing}
+                    isMuted={isMuted}
+                    peersRef={peersRef}
+                    isVideoOff={isVideoOff}
+                    clients={clients}
+                    onEndCall={endCall}
+                    onToggleMic={toggleMic}
+                    onToggleCamera={toggleVideo} 
+                    onToggleScreenShare={isScreenSharing ? endScreenShare : startScreenShare}
+                />
+            )}
+            
+            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: user?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
             {isResizing && (
                 <div 
                     className="fixed inset-0 z-[9999] bg-transparent"

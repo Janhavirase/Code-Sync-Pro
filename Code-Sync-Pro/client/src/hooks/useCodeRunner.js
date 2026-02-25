@@ -1,97 +1,42 @@
-// import { useState, useCallback } from 'react';
-// import toast from 'react-hot-toast';
+import { useState } from 'react';
+import axios from 'axios';
 
-// const useCodeRunner = () => {
-//     const [output, setOutput] = useState('');
-//     const [isRunning, setIsRunning] = useState(false);
-//     const [customInput, setCustomInput] = useState("");
+export const useCodeRunner = () => {
+    const [output, setOutput] = useState("");
+    const [isCompiling, setIsCompiling] = useState(false);
 
-//     const runCode = useCallback(async (currentFile, code, input) => {
-//         setIsRunning(true);
-//         setOutput("Running in Sandbox Environment...");
+    // We pass the code and language directly into the function when the user clicks "Run"
+    const executeCode = async (sourceCode, language = 'javascript') => {
+        if (!sourceCode || !sourceCode.trim()) {
+            setOutput("Error: No code to run!");
+            return;
+        }
 
-//         // ⏳ MOCK DELAY: Simulate network request (1.5 seconds)
-//         await new Promise(resolve => setTimeout(resolve, 1500));
-
-//         // 🎭 MOCK RESPONSE
-//         // In a real app, this would come from the server
-//         try {
-//             if (code.trim() === "") {
-//                 throw new Error("Source code cannot be empty");
-//             }
-
-//             // Simple mock logic for demonstration
-//             let fakeOutput = "";
-//             if (currentFile.language === 'javascript') {
-//                 fakeOutput = `> node ${currentFile.name}\nHello World\n(Mock Execution Successful)`;
-//             } else if (currentFile.language === 'python') {
-//                 fakeOutput = `> python3 ${currentFile.name}\nHello World\n(Mock Execution Successful)`;
-//             } else {
-//                 fakeOutput = `Compiled ${currentFile.language} successfully.\nOutput: Hello World`;
-//             }
-
-//             setOutput(fakeOutput);
-//             toast.success("Execution Complete (Mock)");
-            
-//         } catch (error) {
-//             setOutput(`Error: ${error.message}`);
-//             toast.error("Execution Failed");
-//         } finally {
-//             setIsRunning(false);
-//         }
-//     }, []);
-
-//     return { output, setOutput, isRunning, customInput, setCustomInput, runCode };
-// };
-
-// export default useCodeRunner;
-
-//by community...code X 
-import { useState, useCallback } from 'react';
-import toast from 'react-hot-toast';
-
-const useCodeRunner = () => {
-    const [output, setOutput] = useState('');
-    const [isRunning, setIsRunning] = useState(false);
-    const [customInput, setCustomInput] = useState("");
-
-    const runCode = useCallback(async (currentFile, code, input) => {
-        setIsRunning(true);
-        setOutput("Compiling...");
-
-        // ⏳ Fake Delay to feel realistic (1s)
-        await new Promise(r => setTimeout(r, 1000));
+        setIsCompiling(true);
+        setOutput("Running in Docker Sandbox...\n");
 
         try {
-            // 🎭 Logic to Fake a Successful Run
-            let fakeOutput = "";
+            const response = await axios.post('http://localhost:5000/api/execute', {
+                code: sourceCode,
+                language: language 
+            });
             
-            if (currentFile.language === 'javascript') {
-                // If they wrote console.log, try to show it (basic parsing)
-                const match = code.match(/console\.log\(['"`](.*)['"`]\)/);
-                const logContent = match ? match[1] : "Hello World";
-                fakeOutput = `> node ${currentFile.name}\n${logContent}\n\n[Done] exited with code=0 in 0.123 seconds`;
-            } 
-            else if (currentFile.language === 'python') {
-                const match = code.match(/print\(['"`](.*)['"`]\)/);
-                const logContent = match ? match[1] : "Hello World";
-                fakeOutput = `> python3 ${currentFile.name}\n${logContent}\n\n[Done] exited with code=0 in 0.045 seconds`;
-            } 
-            else {
-                fakeOutput = `> clang ${currentFile.name}\nHello World\n\n[Done] exited with code=0`;
-            }
-
-            setOutput(fakeOutput);
-            toast.success("Compiled Successfully (Mock)");
-
+            // Set the terminal output to whatever Docker sends back!
+            setOutput(response.data.output);
+            
         } catch (error) {
-            setOutput("Error: Execution Failed");
+            console.error("RCE Error:", error);
+            setOutput(
+                error.response?.data?.output || 
+                "Error: Could not connect to the execution server. Is the backend running?"
+            );
         } finally {
-            setIsRunning(false);
+            setIsCompiling(false);
         }
-    }, []);
+    };
 
-    return { output, setOutput, isRunning, customInput, setCustomInput, runCode };
+    // We return a 'clear' function too, just in case you want a "Clear Console" button later!
+    const clearOutput = () => setOutput("");
+
+    return { output, isCompiling, executeCode, clearOutput };
 };
-
-export default useCodeRunner;

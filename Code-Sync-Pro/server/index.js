@@ -1,4 +1,8 @@
 require('dotenv').config(); 
+    // Add these near your other imports at the top
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
 const express = require('express');
 const app = express();
 const http = require('http');
@@ -62,7 +66,62 @@ function getAllConnectedClients(roomId) {
         }
     );
 }
+// --- REMOTE CODE EXECUTION (RCE) ENDPOINT ---
+app.post('/api/execute', (req, res) => {
+    const { code, language } = req.body;
 
+    // Right now, we are only testing JavaScript
+    if (language !== 'javascript') {
+        return res.status(400).json({ output: 'Error: Only JavaScript is supported right now!' });
+    }
+
+    // 1. Create a "temp" folder if it doesn't exist
+    const tempFolder = path.join(__dirname, 'temp');
+    if (!fs.existsSync(tempFolder)) {
+        fs.mkdirSync(tempFolder);
+    }
+
+    // 2. Save the user's code to a temporary file
+    const fileId = Date.now();
+    const filePath = path.join(tempFolder, `${fileId}.js`);
+    fs.writeFileSync(filePath, code);
+
+    // 3. Build the Docker Sandbox Command
+    // --rm: Destroy container after running
+    // -m "50m": Limit RAM so they can't crash your server
+    // --network none: Disable internet (prevents hacking/DDoS)
+    // -v: Mount the temp file into the container
+    // 3. Build the Docker Sandbox Command
+  // 3. Build the Docker Sandbox Command
+    // We convert Windows backslashes to forward slashes for Docker compatibility
+    const linuxFriendlyPath = filePath.replace(/\\/g, '/');
+    
+    // We use the short syntax for the volume mount
+    const dockerCmd = `docker run --rm -m "50m" --network none -v "//${linuxFriendlyPath}":/app/code.js node:18-alpine node /app/code.js`;
+
+    console.log("🚨 RUNNING DOCKER COMMAND:", dockerCmd);
+
+    // 4. Run the container! (Increased to 15 seconds for Windows cold-start)
+    exec(dockerCmd, { timeout: 15000 }, (error, stdout, stderr) => {
+        // Instantly delete the temp file so your server doesn't get cluttered
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        // Handle Infinite Loops
+        if (error && error.killed) {
+            return res.json({ output: 'Error: Execution Timed Out (Infinite loop detected!)' });
+        }
+
+        // Handle Syntax Errors
+        if (error || stderr) {
+            return res.json({ output: stderr || error.message });
+        }
+
+        // Success! Send the console logs back to the frontend
+        res.json({ output: stdout });
+    });
+});
 io.on('connection', (socket) => {
     // 🚨 THE WIRETAP: Catch EVERYTHING coming from the frontend
     socket.onAny((eventName, ...args) => {
@@ -113,7 +172,52 @@ io.on('connection', (socket) => {
     socket.on(ACTIONS.SYNC_CODE, ({ socketId, files }) => {
         io.to(socketId).emit(ACTIONS.SYNC_CODE, { files });
     });
+// Inside io.on('connection', (socket) => { ... })
 
+// 1. User A invites the room
+// 🚨 THIS IS THE MISSING KICKSTART
+// It tells the user who just joined the call who else they need to connect to.
+socket.on('request-call-join', ({ roomId }) => {
+    // 1. Find everyone currently in this specific room
+    const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+    
+    // 2. Filter out the person asking, so they don't call themselves
+    const otherUsers = clientsInRoom.filter(id => id !== socket.id);
+    
+    // 3. Send the phonebook back to the frontend
+    socket.emit('all-users', otherUsers);
+});
+socket.on('client:invite-call', ({ roomId, username }) => {
+    socket.to(roomId).emit('server:invite-call', { 
+        from: username, 
+        callerId: socket.id 
+    });
+});
+
+// 2. User B accepts the invitation
+socket.on('client:accept-call', ({ roomId, callerId }) => {
+    // Tell User A that User B is ready to handshake
+    io.to(callerId).emit('server:call-accepted', { signalTarget: socket.id });
+    // Tell User B to prepare their own video
+    socket.emit('server:prepare-local-stream');
+});
+// 3. User A sends their WebRTC "Offer" (Signal) to User B
+socket.on("sending-signal", (payload) => {
+    // This forwards User A's connection data to User B
+    io.to(payload.userToSignal).emit('user-joined', { 
+        signal: payload.signal, 
+        callerID: payload.callerID 
+    });
+});
+
+// 4. User B sends their "Answer" back to User A
+socket.on("returning-signal", (payload) => {
+    // This completes the handshake so they can see each other
+    io.to(payload.callerID).emit('receiving-returned-signal', { 
+        signal: payload.signal, 
+        id: socket.id 
+    });
+});
     // 3. FILE SYSTEM EVENTS
    // 3. FILE SYSTEM EVENTS (Make sure this is in server.js!)
     // Inside server.js
