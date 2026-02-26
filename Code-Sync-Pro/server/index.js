@@ -232,10 +232,7 @@ socket.on("returning-signal", (payload) => {
         console.log(`🚨 [SERVER] Syncing DELETED FILE to room ${roomId}`);
         socket.to(roomId).emit('file-deleted', { files });
     });
-    // 4. FEATURES (Chat, Comments)
-    socket.on('comment:new', ({ roomId, comment }) => {
-        socket.to(roomId).emit('comment:new', comment);
-    });
+    
 
     socket.on('sync-history', ({ socketId, history }) => {
         io.to(socketId).emit('sync-history', { history });
@@ -286,7 +283,10 @@ socket.on("returning-signal", (payload) => {
             id: socket.id 
         });
     });
-
+socket.on('comment:new', ({ roomId, comment }) => {
+        // This tells the server: "Broadcast this comment to everyone in the room EXCEPT the sender"
+        socket.in(roomId).emit('comment:new', { comment });
+    });
     // 7. DISCONNECT
     socket.on('disconnecting', () => {
         const rooms = [...socket.rooms];

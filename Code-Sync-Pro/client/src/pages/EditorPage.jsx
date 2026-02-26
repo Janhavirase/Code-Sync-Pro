@@ -20,7 +20,7 @@ import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, 
     Settings, Play, Loader2, Download, Share2, 
-    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff
+    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save
 } from 'lucide-react';
 
 // ✅ IMPORT CUSTOM HOOKS
@@ -67,8 +67,11 @@ const EditorPage = () => {
     const [activeSidebarTab, setActiveSidebarTab] = useState('files');
     const [activeMainView, setActiveMainView] = useState('editor');
     const [activeBottomTab, setActiveBottomTab] = useState('console');
+    
+    // 💬 RESTORED: Comments State
     const [comments, setComments] = useState([]);
     const [activeLine, setActiveLine] = useState(null);
+    
     const [liveRepoUrl, setLiveRepoUrl] = useState(null);
     const [srcDoc, setSrcDoc] = useState('');
     const [isTimeTravelActive, setIsTimeTravelActive] = useState(false);
@@ -120,7 +123,7 @@ const EditorPage = () => {
             socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
                 if (username !== user?.username) {
                     toast.success(`${username} joined.`);
-                    socketRef.current.emit(ACTIONS.SYNC_CODE, { files, socketId });
+                    socketRef.current.emit(ACTIONS.SYNC_CODE, { files,comments, socketId });
                 }
                 setClients(clients);
             });
@@ -181,8 +184,23 @@ const EditorPage = () => {
                 }
             });
 
-            socketRef.current.on(ACTIONS.SYNC_CODE, ({ files: syncedFiles }) => {
-                if (syncedFiles && syncedFiles.length > 0) setFiles(syncedFiles);
+         socketRef.current.on(ACTIONS.SYNC_CODE, ({ files: syncedFiles, comments: syncedComments }) => {
+    // 1. Update the files/code
+    if (syncedFiles && syncedFiles.length > 0) {
+        setFiles(syncedFiles);
+    }
+    
+    // 2. Update the comments (Now syncedComments is defined!)
+    if (syncedComments && Array.isArray(syncedComments)) {
+        setComments(syncedComments); 
+    }
+});
+            
+            // 💬 Listen for incoming comments
+           socketRef.current.on('comment:new', ({ comment }) => {
+    // ✅ GOOD: Always appends to the latest version of the array
+    setComments((prevComments) => [...prevComments, comment]);
+                toast("New comment added");
             });
 
             socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
@@ -233,11 +251,32 @@ const EditorPage = () => {
         else setActiveBottomTab('console');
     };
 
+    // 💬 RESTORED: Comment Logic
     const handleAddComment = (text, line) => {
-        const newComment = { username: user?.username || 'Guest', text, line, timestamp: Date.now() };
-        setComments(prev => [...prev, newComment]);
-        if(socketRef.current) socketRef.current.emit('comment:new', { roomId, comment: newComment });
+    // 1. Create a readable time string (e.g., "10:30 PM")
+    const readableTime = new Date().toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+
+    const newComment = { 
+        username: user?.username || 'Guest', 
+        text, 
+        // 2. Ensure line is always a number to avoid "12" vs 12 bugs
+        line: parseInt(line), 
+        // 3. Keep id as a timestamp for sorting, but add readableTime for the UI
+        id: Date.now(), 
+        timestamp: readableTime 
     };
+
+    // Update local state using functional update to prevent race conditions
+    setComments(prev => [...prev, newComment]);
+
+    // Broadcast to the room
+    if (socketRef.current) {
+        socketRef.current.emit('comment:new', { roomId, comment: newComment });
+    }
+};
 
     const toggleTimeTravel = () => {
         if (!isTimeTravelActive) {
@@ -295,16 +334,22 @@ const EditorPage = () => {
         } catch (err) { toast.error('Failed to copy link'); }
     };
     
+    // 💾 RESTORED: Save Project Logic
     const saveProject = async () => {
         if (!userId) return toast.error("Guest Mode: Cannot Save.");
         try {
+            toast.loading("Saving project...");
             const res = await fetch('http://127.0.0.1:5000/api/projects', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ roomId, name: `Project ${roomId.slice(0, 4)}`, userId, files })
             });
+            toast.dismiss();
             res.ok ? toast.success('Saved Successfully!') : toast.error('Save failed.');
-        } catch (error) { toast.error('Server error.'); }
+        } catch (error) { 
+            toast.dismiss();
+            toast.error('Server error.'); 
+        }
     };
 
     if (!location.state && !userId) return <Navigate to="/" state={{ roomId }} />;
@@ -319,6 +364,8 @@ const EditorPage = () => {
                 </div>
                 <div className="flex border-b border-[#333] bg-[#252526]">
                     <button onClick={() => setActiveSidebarTab('files')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'files' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>📁</button>
+                    {/* 💬 RESTORED: Comments Tab */}
+                    <button onClick={() => setActiveSidebarTab('comments')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'comments' ? 'text-orange-400 border-b-2 border-orange-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>💬</button>
                     <button onClick={() => setActiveSidebarTab('users')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'users' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>👥</button>
                     <button onClick={() => setActiveSidebarTab('chat')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'chat' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>💬</button>
                     <button onClick={() => setActiveSidebarTab('ai')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'ai' ? 'text-blue-400 border-b-2 border-blue-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>⚡</button>
@@ -345,6 +392,19 @@ const EditorPage = () => {
                             ))}
                         </div>
                     )}
+                    
+                    {/* 💬 RESTORED: Comments Panel Component */}
+                 {/* 💬 RESTORED: Comments Panel Component */}
+                  {/* ✅ NEW WAY (Passes all comments so the list works) */}
+{activeSidebarTab === 'comments' && (
+    <CommentsPanel 
+        comments={comments} // Pass everything!
+        activeLine={activeLine}
+        onAddComment={handleAddComment}
+        onClose={() => setActiveSidebarTab('files')}
+    />
+)}
+                    
                     {activeSidebarTab === 'users' && <div className="grid grid-cols-3 gap-3 p-2">{clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}</div>}
                     {activeSidebarTab === 'chat' && <div className="h-full flex flex-col"><Chat socketRef={socketRef} roomId={roomId} username={user?.username} /></div>}
                     {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
@@ -399,6 +459,12 @@ const EditorPage = () => {
                         )}
 
                         <button onClick={toggleTimeTravel} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${isTimeTravelActive ? 'bg-red-600 animate-pulse' : 'bg-yellow-600 hover:bg-yellow-700'}`}>{isTimeTravelActive ? 'Exit Replay' : '🕒 History'}</button>
+                        
+                        {/* 💾 RESTORED: Save Button */}
+                        <button onClick={saveProject} className="flex items-center gap-2 bg-[#333] hover:bg-[#444] text-white px-3 py-1 rounded-sm text-xs font-bold transition-all border border-gray-600">
+                            <Save size={14} /> Save
+                        </button>
+                        
                         <button onClick={() => setIsDeployModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95">Deploy</button>
                         <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
                         <button onClick={handleInvite} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{inviteCopied ? <Check size={14} /> : <UserPlus size={14} />} {inviteCopied ? 'Copied' : 'Invite'}</button>
@@ -418,6 +484,7 @@ const EditorPage = () => {
                                 language={files.find(f => f.name === activeFileName)?.language || 'javascript'}
                                 code={isTimeTravelActive ? (fileHistoryRef.current[activeFileName]?.[playbackIndex] || '') : (files.find(f => f.name === activeFileName)?.value || '')} 
                                 onCodeChange={handleCodeChange}
+                                // 💬 RESTORED: Active Line for Comments
                                 onLineSelect={(line, forceOpen) => { setActiveLine(line); if (forceOpen) setActiveSidebarTab('comments'); }}
                                 comments={comments} 
                                 theme={editorTheme} fontSize={editorFontSize} fontFamily={editorFontFamily} wordWrap={editorWordWrap}
@@ -471,7 +538,7 @@ const EditorPage = () => {
 
             {isCallActive && stream && (
                 <VideoChat 
-                key="persistent-video-chat"
+                    key="persistent-video-chat" // 🚨 Key forces a fresh mount if things glitch
                     socketRef={socketRef} 
                     roomId={roomId} 
                     stream={stream}
@@ -483,7 +550,7 @@ const EditorPage = () => {
                     startRecording={startRecording}
                     stopRecording={stopRecording}
                     getNetworkStats={getNetworkStats}
-                    peersRef={peersRef}
+                    peersRef={peersRef} // 🚨 CRITICAL: Passing the ref for screen share bridging
                     isVideoOff={isVideoOff}
                     clients={clients}
                     onEndCall={endCall}
@@ -494,6 +561,22 @@ const EditorPage = () => {
             )}
             
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: user?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
+       {isDeployModalOpen && (
+                <DeployModal 
+                    isOpen={isDeployModalOpen} 
+                    onClose={() => setIsDeployModalOpen(false)} 
+                    files={files} 
+                />
+            )}
+
+            {isShareModalOpen && (
+                <ShareSnippetModal 
+                    isOpen={isShareModalOpen} 
+                    onClose={() => setIsShareModalOpen(false)} 
+                    files={files} 
+                    activeFile={activeFileName} 
+                />
+            )}
         </div>
     );
 };

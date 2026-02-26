@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 
-// Note: We removed 'socketRef' and 'roomId' from props because 
-// the parent component (EditorPage) handles the networking now.
 const CodeEditor = ({ 
     onCodeChange, 
     code, 
@@ -11,23 +9,21 @@ const CodeEditor = ({
     onLineSelect, 
     fontSize = 16,
     fontFamily = 'monospace',
-    wordWrap = false
+    wordWrap = false,
+    comments // 🚨 FIX 1: Added comments to props
 }) => {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
+    const decorationsRef = useRef([]);
 
     function handleEditorDidMount(editor, monaco) {
-        // console.log("✅ Editor Mounted!");
         editorRef.current = editor;
         monacoRef.current = monaco; 
         setEditorLoaded(true);
 
         // 1. Handle Code Changes
         editor.onDidChangeModelContent((event) => {
-            // 🛑 STOP: Don't emit socket events here. 
-            // Just tell the parent "The code changed".
-            // The parent (EditorPage) will use the Hook to debounce and emit safely.
             const currentCode = editor.getValue();
             onCodeChange(currentCode); 
         });
@@ -51,7 +47,41 @@ const CodeEditor = ({
         });
     }
 
-    // ✅ FORCE UPDATE OPTIONS
+    // 🚨 FIX 2 & 3: Moved useEffects OUTSIDE of handleEditorDidMount
+
+// ✅ APPLY COMMENT HIGHLIGHTS
+// ✅ APPLY COMMENT HIGHLIGHTS (WITH SAFETY CHECKS)
+    useEffect(() => {
+        if (editorRef.current && monacoRef.current && Array.isArray(comments)) {
+            
+            // 🚨 THE FIX: .filter() removes any null/broken comments before mapping!
+            const newDecorations = comments
+                .filter(comment => comment && comment.line !== undefined && comment.line !== null)
+                .map(comment => {
+                    const lineNum = parseInt(comment.line) || 1; 
+
+                    return {
+                        range: new monacoRef.current.Range(lineNum, 1, lineNum, 1),
+                        options: {
+                            isWholeLine: true,
+                            className: 'monaco-comment-highlight', 
+                            glyphMarginClassName: 'monaco-comment-glyph',
+                            // Fallbacks for username and text just in case they are missing too
+                            hoverMessage: { value: `**${comment.username || 'User'}**: ${comment.text || 'No text'}` },
+                            stickiness: 1 // 1 = NeverGrowsWhenTypingAtEdges
+                        }
+                    };
+                });
+
+            decorationsRef.current = editorRef.current.deltaDecorations(
+                decorationsRef.current, 
+                newDecorations          
+            );
+        }
+    }, [comments]);
+
+
+    // ✅ FORCE UPDATE OPTIONS (Font, Wrap)
     useEffect(() => {
         if (editorRef.current) {
             editorRef.current.updateOptions({
@@ -62,7 +92,8 @@ const CodeEditor = ({
         }
     }, [fontSize, fontFamily, wordWrap]); 
 
-    // ✅ THEME DEFINITION (Kept your custom logic)
+
+    // ✅ THEME DEFINITION
     useEffect(() => {
         if (monacoRef.current && editorLoaded) {
             const monaco = monacoRef.current;
@@ -122,12 +153,10 @@ const CodeEditor = ({
                 cursorSmoothCaretAnimation: true,
                 automaticLayout: true,
                 contextmenu: true,
-                glyphMargin: true,
+                glyphMargin: true, // 🚨 Required for the comment icon!
             }}
         />
     );
 };
 
-// ✅ IMPORTANT: React.memo prevents the editor from re-rendering 
-// unless the props (code, language, theme) actually change.
 export default React.memo(CodeEditor);
