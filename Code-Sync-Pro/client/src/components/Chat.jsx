@@ -59,8 +59,12 @@ const Chat = ({ socketRef, roomId, username }) => {
             </div>
 
             {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                {messages.length === 0 ? (
+<div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth 
+    [&::-webkit-scrollbar]:!w-1.5 
+    [&::-webkit-scrollbar-track]:!bg-transparent 
+    [&::-webkit-scrollbar-thumb]:!bg-[#333] 
+    [&::-webkit-scrollbar-thumb]:rounded-full 
+    hover:[&::-webkit-scrollbar-thumb]:!bg-[#444]">                {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-2 opacity-60">
                         <MessageSquare size={32} />
                         <span className="text-xs">No messages yet. Say hi!</span>

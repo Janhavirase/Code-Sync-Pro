@@ -99,8 +99,8 @@ const AIAnalysisPanel = ({ currentCode, language }) => {
             </div>
 
             {/* Chat History Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar scroll-smooth">
-                {messages.map((msg, index) => {
+{/* ✅ Custom Dark Scrollbar: Slim, rounded, and matches the theme */}
+<div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#333] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#444]">                {messages.map((msg, index) => {
                     const isAI = msg.role === 'ai';
                     
                     return (
@@ -119,8 +119,8 @@ const AIAnalysisPanel = ({ currentCode, language }) => {
                                         {copiedIndex === index ? <Check size={12} className="text-green-400"/> : <Copy size={12} className="text-gray-300"/>}
                                     </button>
                                 )}
-                                <div className="whitespace-pre-wrap leading-relaxed overflow-x-auto custom-scrollbar">
-                                    {msg.text}
+{/* ✅ Keeps code snippets scrollable without the ugly white bar */}
+<div className="whitespace-pre-wrap leading-relaxed overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">                                    {msg.text}
                                 </div>
                             </div>
                         </div>
@@ -145,7 +145,8 @@ const AIAnalysisPanel = ({ currentCode, language }) => {
 
             {/* Input & Quick Actions Area */}
             <div className="p-3 bg-[#1e1e1e] border-t border-[#333] shrink-0 flex flex-col gap-3 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-10">
-                <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+               {/* ✅ The scrollbar is now invisible, giving you more room for the chat! */}
+<div className="flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                     {tools.map(tool => {
                         const Icon = tool.icon;
                         return (

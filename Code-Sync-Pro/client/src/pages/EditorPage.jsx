@@ -19,9 +19,9 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import DeployModal from '../components/DeployModal';
 import { 
-    Files, Users, MessageSquare, Bot, MessageCircle, 
+    Files, Users, MessageSquare, Bot, MessageCircle, Folder,Sparkles,
     Settings, Play, Loader2, Download, Share2, 
-    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save
+    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save,QrCode, Copy, LogOut
 } from 'lucide-react';
 
 // ✅ IMPORT CUSTOM HOOKS
@@ -424,19 +424,69 @@ const handleCommentClick = (line) => {
         <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
             {/* SIDEBAR */}
             <aside className="w-80 bg-[#181818] border-r border-[#333] flex flex-col z-20 shrink-0 shadow-2xl">
-                <div className="p-4 border-b border-[#333] flex items-center gap-2">
-                    <img className="w-8" src="/code-sync.png" alt="logo" />
-                    <span className="font-bold text-lg">CodeSync</span>
-                </div>
-                <div className="flex border-b border-[#333] bg-[#252526]">
-                    <button onClick={() => setActiveSidebarTab('files')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'files' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>📁</button>
-                    {/* 💬 RESTORED: Comments Tab */}
-                    <button onClick={() => setActiveSidebarTab('comments')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'comments' ? 'text-orange-400 border-b-2 border-orange-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>💬</button>
-                    <button onClick={() => setActiveSidebarTab('users')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'users' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>👥</button>
-                    <button onClick={() => setActiveSidebarTab('chat')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'chat' ? 'text-green-400 border-b-2 border-green-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>💬</button>
-                    <button onClick={() => setActiveSidebarTab('ai')} className={`flex-1 p-3 text-sm transition-colors ${activeSidebarTab === 'ai' ? 'text-blue-400 border-b-2 border-blue-400 bg-[#1e1e1e]' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>⚡</button>
-                </div>
+              {/* 🌟 Premium Branding Header */}
+<div className="flex items-center gap-3 px-4 py-6 mb-2 group transition-all duration-300 border-b border-[#333]/30">
+    {/* The Sleek "C" Logo */}
+    <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#a855f7] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 transform group-hover:rotate-6 group-hover:scale-110 transition-all duration-300 shrink-0">
+        <span className="text-white text-xl font-black">C</span>
+    </div>
 
+    <div className="flex items-baseline gap-1.5">
+        <h1 className="text-white font-black text-xl tracking-tighter transition-colors">
+            CodeSync
+        </h1>
+        {/* "Editor" in Light weight for that Senior Dev Tool look */}
+        <span className="text-gray-400 font-extralight text-lg tracking-tight opacity-80">
+            Editor
+        </span>
+    </div>
+</div>
+{/* 🚀 Professional Activity Bar - Logic preserved with activeSidebarTab */}
+{/* 🚀 High-Visibility Pro Activity Bar */}
+{/* 🚀 Refined Pro Activity Bar - Thin, Sharp, and Spaced */}
+<div className="flex items-center justify-around bg-[#1e1e1e] border-b border-[#333] shrink-0 h-14 relative">
+    {[
+        { id: 'files', icon: Folder, label: 'Explorer' },
+        { id: 'comments', icon: MessageCircle, label: 'Comments' },
+        { id: 'users', icon: Users, label: 'People' },
+        { id: 'chat', icon: MessageSquare, label: 'Chat' },
+        { id: 'ai', icon: Sparkles, label: 'AI Doctor' },
+    ].map((tab) => {
+        const Icon = tab.icon;
+        const isActive = activeSidebarTab === tab.id;
+
+        return (
+            <button
+                key={tab.id}
+                onClick={() => setActiveSidebarTab(tab.id)}
+                className={`relative flex-1 h-full flex flex-col items-center justify-center gap-1 transition-all duration-300
+                    ${isActive ? 'bg-[#252526]' : 'hover:bg-[#2a2a2a]'}`}
+            >
+                {/* 🌈 Icon - Sized down to 18 for elegance */}
+                <Icon 
+                    size={18} 
+                    className={`transition-all duration-300 
+                        ${isActive 
+                            ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' 
+                            : 'text-gray-500 hover:text-gray-300'}`} 
+                />
+
+                {/* 🏷️ Label - Thinner, Spaced, and Smaller */}
+                <span className={`text-[8px] font-medium uppercase tracking-[0.1em] transition-colors duration-300
+                    ${isActive ? 'text-white' : 'text-gray-500'}`}>
+                    {tab.label}
+                </span>
+
+                {/* ✨ Minimalist Bottom Indicator */}
+                <div className={`absolute bottom-0 left-0 right-0 h-[1.5px] transition-all duration-500
+                    ${isActive 
+                        ? 'bg-indigo-500 scale-x-75 shadow-[0_0_10px_#6366f1]' 
+                        : 'bg-transparent scale-x-0'}`} 
+                />
+            </button>
+        );
+    })}
+</div>
                 <div className="flex-1 overflow-y-auto p-2">
                   {activeSidebarTab === 'files' && (
     <FileSidebar 
@@ -502,15 +552,33 @@ const handleCommentClick = (line) => {
                  {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
                 </div>
 
-                <div className="p-4 border-t border-[#333] flex flex-col gap-2 bg-[#181818]">
-                    <button className="btn bg-[#333] hover:bg-[#444] text-white py-2 rounded text-sm transition-colors" onClick={() => setShowQR(!showQR)}>{showQR ? 'Hide QR' : 'Show QR'}</button>
-                    {showQR && <div className="p-2 bg-white rounded flex justify-center animate-fadeIn"><QRCode value={roomId} size={100} /></div>}
-                    <div className="flex gap-2">
-                        <button className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded text-sm font-bold transition-all" onClick={copyRoomId}>Copy ID</button>
-                        <button className="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded text-sm font-bold transition-all" onClick={() => navigate('/')}>Leave</button>
-                    </div>
-                </div>
-                <div className="p-2 border-t border-[#333]"><button onClick={() => setIsSettingsOpen(true)} className="w-full p-3 flex items-center gap-3 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded transition-colors"><Settings size={18}/><span className="text-sm font-bold">Settings</span></button></div>
+               {/* 🌟 PREMIUM COMPACT FOOTER (Paste this here instead!) */}
+<div className="flex items-center justify-between p-3 border-t border-[#333] bg-[#1e1e1e] shrink-0 relative">
+    
+    {/* Floating QR Code Modal */}
+    {showQR && (
+        <div className="absolute bottom-14 left-4 p-3 bg-white rounded-xl shadow-2xl animate-fadeIn z-50 border border-gray-200">
+            <QRCode value={roomId} size={120} />
+            <div className="text-center text-xs text-gray-800 font-bold mt-2">Scan to Join</div>
+        </div>
+    )}
+
+    <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-colors" title="Settings">
+        <Settings size={18} />
+    </button>
+    
+    <div className="flex items-center gap-1">
+        <button onClick={() => setShowQR(!showQR)} className={`p-2 rounded-lg transition-colors ${showQR ? 'bg-[#2a2a2a] text-white' : 'text-gray-400 hover:text-white hover:bg-[#2a2a2a]'}`} title="Room QR Code">
+            <QrCode size={18} />
+        </button>
+        <button onClick={copyRoomId} className="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-[#2a2a2a] rounded-lg transition-colors" title="Copy Room ID">
+            <Copy size={18} />
+        </button>
+        <button onClick={() => navigate('/')} className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Leave Room">
+            <LogOut size={18} />
+        </button>
+    </div>
+</div>
             </aside>
 
             {/* MAIN AREA */}
