@@ -184,7 +184,14 @@ const EditorPage = () => {
                     codeRef.current = updatedFiles[0].value;
                 }
             });
-
+// Listen for teammates navigating the file tree
+socketRef.current.on('user:active_file', ({ username, fileName }) => {
+    setClients(prevClients => 
+        prevClients.map(c => 
+            c.username === username ? { ...c, activeFile: fileName } : c
+        )
+    );
+});
          socketRef.current.on(ACTIONS.SYNC_CODE, ({ files: syncedFiles, comments: syncedComments }) => {
     // 1. Update the files/code
     if (syncedFiles && syncedFiles.length > 0) {
@@ -254,6 +261,14 @@ const handleCommentClick = (line) => {
         setIsTimeTravelActive(false);
         if (name.endsWith('.html') || name.endsWith('.css') || name.endsWith('.js')) setActiveBottomTab('preview');
         else setActiveBottomTab('console');
+
+        if (socketRef.current) {
+        socketRef.current.emit('user:active_file', { 
+            roomId, 
+            username: user?.username, 
+            fileName: name 
+        });
+    }
     };
 
     // 💬 RESTORED: Comment Logic
@@ -386,7 +401,8 @@ const handleCommentClick = (line) => {
             type: f.type || 'file',
             parentId: f.parentId || null
         }))}
-        
+        clients={clients}                // 🚨 Pass the users down!
+    currentUser={user?.username}
         // 2. Highlight the currently active file
         activeFileId={activeFileName} 
         

@@ -10,7 +10,9 @@ const FileSidebar = ({
     activeFileId, 
     onFileClick, 
     onCreateItem, 
-    onDeleteItem 
+    onDeleteItem ,
+    clients = [],        // 🚨 NEW: Receive the active users
+    currentUser
 }) => {
     // State to track which folders are open
     const [expandedFolders, setExpandedFolders] = useState(new Set(['root']));
@@ -50,7 +52,10 @@ const FileSidebar = ({
             const isFolder = item.type === 'folder';
             const isExpanded = expandedFolders.has(item.id);
             const isActive = activeFileId === item.id;
-
+// 🚨 NEW: Find anyone looking at this specific file (excluding ourselves)
+            const activeUsersInFile = clients.filter(c => 
+                c.activeFile === item.name && c.username !== currentUser
+            );
             return (
                 <div key={item.id}>
                     <div 
@@ -80,6 +85,19 @@ const FileSidebar = ({
                             )}
                             
                             <span className="truncate select-none tracking-wide">{item.name}</span>
+                             {!isFolder && activeUsersInFile.length > 0 && (
+                                <div className="flex -space-x-1.5 ml-1">
+                                    {activeUsersInFile.map((u, i) => (
+                                        <div 
+                                            key={i} 
+                                            className="w-4 h-4 rounded-full bg-indigo-500 border border-[#1e1e1e] flex items-center justify-center text-[8px] font-bold text-white shadow-sm" 
+                                            title={`${u.username} is editing`}
+                                        >
+                                            {u.username?.charAt(0).toUpperCase()}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Hover Actions (Delete) */}
@@ -141,6 +159,7 @@ const FileSidebar = ({
                     <button onClick={() => onCreateItem('folder', null)} className="hover:text-white transition-colors" title="New Folder at Root">
                         <FolderPlus size={14} />
                     </button>
+                   
                 </div>
             </div>
 

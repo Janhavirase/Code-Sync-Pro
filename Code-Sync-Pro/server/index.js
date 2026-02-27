@@ -233,7 +233,10 @@ socket.on("returning-signal", (payload) => {
         socket.to(roomId).emit('file-deleted', { files });
     });
     
-
+socket.on('user:active_file', ({ roomId, username, fileName }) => {
+    // Broadcast to everyone else in the room
+    socket.in(roomId).emit('user:active_file', { username, fileName });
+});
     socket.on('sync-history', ({ socketId, history }) => {
         io.to(socketId).emit('sync-history', { history });
     });
