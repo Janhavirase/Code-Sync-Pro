@@ -267,14 +267,15 @@ socket.on('user:active_file', ({ roomId, username, fileName }) => {
         console.log(`🚀 [DEBUG] SERVER BROADCASTED to room: ${roomId}`);
     });
 
-    // 5. WHITEBOARD EVENTS
-    socket.on('whiteboard-draw', ({ roomId, x, y, prevX, prevY, color, size }) => {
-        socket.to(roomId).emit('whiteboard-draw', { x, y, prevX, prevY, color, size });
-    });
+   // 5. WHITEBOARD EVENTS (Upgraded to pass the ENTIRE object)
+socket.on('whiteboard-draw', (data) => {
+    // We send the exact 'data' object we received, untouched, to everyone else in the room
+    socket.to(data.roomId).emit('whiteboard-draw', data);
+});
 
-    socket.on('whiteboard-clear', ({ roomId }) => {
-        socket.to(roomId).emit('whiteboard-clear');
-    });
+socket.on('whiteboard-clear', ({ roomId }) => {
+    socket.to(roomId).emit('whiteboard-clear');
+});
 
     // 6. VIDEO CALL SIGNALING
     socket.on('sending-signal', payload => {
