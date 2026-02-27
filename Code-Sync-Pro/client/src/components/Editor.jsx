@@ -1,39 +1,41 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Editor from '@monaco-editor/react';
+import MonacoEditor from '@monaco-editor/react';
 
-const CodeEditor = ({ 
+const Editor = ({ 
     onCodeChange, 
     code, 
+    jumpToLine,
     theme = 'vs-dark', 
     language = 'javascript', 
     onLineSelect, 
     fontSize = 16,
     fontFamily = 'monospace',
     wordWrap = false,
-    comments // 🚨 FIX 1: Added comments to props
+    comments 
 }) => {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
     const decorationsRef = useRef([]);
 
+    // 1. Handle Editor Mounting
     function handleEditorDidMount(editor, monaco) {
         editorRef.current = editor;
         monacoRef.current = monaco; 
         setEditorLoaded(true);
 
-        // 1. Handle Code Changes
-        editor.onDidChangeModelContent((event) => {
+        // Sync local changes to parent
+        editor.onDidChangeModelContent(() => {
             const currentCode = editor.getValue();
             onCodeChange(currentCode); 
         });
 
-        // 2. Cursor Tracking
+        // Track cursor for line selection
         editor.onDidChangeCursorPosition((e) => {
             if (onLineSelect) onLineSelect(e.position.lineNumber, false);
         });
 
-        // 3. Right Click Action
+        // Add Right-Click "Add Comment" Action
         editor.addAction({
             id: 'add-comment-action',
             label: '💬 Add Comment to this Line',
@@ -47,14 +49,19 @@ const CodeEditor = ({
         });
     }
 
-    // 🚨 FIX 2 & 3: Moved useEffects OUTSIDE of handleEditorDidMount
+    // ✅ JUMP TO LINE LOGIC
+    useEffect(() => {
+        if (editorRef.current && jumpToLine) {
+            const line = parseInt(jumpToLine);
+            editorRef.current.revealLineInCenter(line);
+            editorRef.current.setPosition({ lineNumber: line, column: 1 });
+            editorRef.current.focus();
+        }
+    }, [jumpToLine]);
 
-// ✅ APPLY COMMENT HIGHLIGHTS
-// ✅ APPLY COMMENT HIGHLIGHTS (WITH SAFETY CHECKS)
+    // ✅ APPLY COMMENT HIGHLIGHTS (WITH SAFETY & STICKINESS)
     useEffect(() => {
         if (editorRef.current && monacoRef.current && Array.isArray(comments)) {
-            
-            // 🚨 THE FIX: .filter() removes any null/broken comments before mapping!
             const newDecorations = comments
                 .filter(comment => comment && comment.line !== undefined && comment.line !== null)
                 .map(comment => {
@@ -66,9 +73,8 @@ const CodeEditor = ({
                             isWholeLine: true,
                             className: 'monaco-comment-highlight', 
                             glyphMarginClassName: 'monaco-comment-glyph',
-                            // Fallbacks for username and text just in case they are missing too
                             hoverMessage: { value: `**${comment.username || 'User'}**: ${comment.text || 'No text'}` },
-                            stickiness: 1 // 1 = NeverGrowsWhenTypingAtEdges
+                            stickiness: 1 // NeverGrowsWhenTypingAtEdges
                         }
                     };
                 });
@@ -80,8 +86,7 @@ const CodeEditor = ({
         }
     }, [comments]);
 
-
-    // ✅ FORCE UPDATE OPTIONS (Font, Wrap)
+    // ✅ UPDATE FONT & WRAP OPTIONS
     useEffect(() => {
         if (editorRef.current) {
             editorRef.current.updateOptions({
@@ -92,8 +97,7 @@ const CodeEditor = ({
         }
     }, [fontSize, fontFamily, wordWrap]); 
 
-
-    // ✅ THEME DEFINITION
+    // ✅ CUSTOM THEME DEFINITIONS
     useEffect(() => {
         if (monacoRef.current && editorLoaded) {
             const monaco = monacoRef.current;
@@ -138,7 +142,7 @@ const CodeEditor = ({
     }, [theme, editorLoaded]);
 
     return (
-        <Editor
+        <MonacoEditor
             height="100%"
             theme={theme}
             language={language}
@@ -153,10 +157,10 @@ const CodeEditor = ({
                 cursorSmoothCaretAnimation: true,
                 automaticLayout: true,
                 contextmenu: true,
-                glyphMargin: true, // 🚨 Required for the comment icon!
+                glyphMargin: true, 
             }}
         />
     );
 };
 
-export default React.memo(CodeEditor);
+export default React.memo(Editor);

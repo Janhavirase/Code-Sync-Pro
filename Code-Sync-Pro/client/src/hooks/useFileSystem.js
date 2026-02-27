@@ -91,35 +91,49 @@ const useFileSystem = (initialFiles, socketRef, roomId) => {
         if (file) codeRef.current = file.value;
     };
 
-    const createNewFile = (newFileName) => {
-        // 🔍 DEBUG: Step 1 - Function Called
-        console.log(`[DEBUG] 📂 createNewFile called for: "${newFileName}"`);
+  // We changed the arguments to accept the type ('file' or 'folder') and parentId
+const createNewItem = (itemName, type = 'file', parentId = null) => {
+    // 🔍 DEBUG: Step 1 - Function Called
+    console.log(`[DEBUG] 📂 createNewItem called for: "${itemName}", Type: ${type}`);
 
-        if (files.some(f => f.name === newFileName)) {
-            toast.error("File already exists!");
-            return false;
-        }
-        
-        const newFile = { name: newFileName, language: 'javascript', value: '// New File' };
-        const updatedFiles = [...files, newFile];
-        
-        // Update Local State
-        setFiles(updatedFiles);
-        fileHistoryRef.current[newFileName] = [newFile.value];
-        
-        // 🔍 DEBUG: Step 2 - Checking Socket
-        if(socketRef.current) {
-            console.log(`[DEBUG] 🚀 Emitting FILE_CREATED to server for Room: ${roomId}`);
-            console.log(`[DEBUG] 📦 Payload Files:`, updatedFiles);
-            
-            socketRef.current.emit(ACTIONS.FILE_CREATED, { roomId, files: updatedFiles });
-        } else {
-            console.error(`[DEBUG] ❌ Socket is NULL! Cannot emit FILE_CREATED.`);
-        }
-        
-        toast.success("File created!");
-        return true;
+    if (files.some(f => f.name === itemName)) {
+        toast.error(`${type === 'folder' ? 'Folder' : 'File'} already exists!`);
+        return false;
+    }
+    
+    // ✨ THE UPGRADE: Added id, type, parentId, and dynamic language
+    const newItem = { 
+        id: Date.now().toString(), // Unique ID for the new sidebar
+        name: itemName, 
+        type: type,                // 'file' or 'folder'
+        parentId: parentId,        // Enables nested folders in the UI
+        language: type === 'file' ? (itemName.split('.').pop() || 'javascript') : null, 
+        value: type === 'file' ? '// New File' : null 
     };
+    
+    const updatedFiles = [...files, newItem];
+    
+    // Update Local State
+    setFiles(updatedFiles);
+    
+    // Keep your exact history logic (but only apply it to files, not folders)
+    if (type === 'file') {
+        fileHistoryRef.current[itemName] = [newItem.value];
+    }
+    
+    // 🔍 DEBUG: Step 2 - Checking Socket (YOUR EXACT LOGIC)
+    if(socketRef.current) {
+        console.log(`[DEBUG] 🚀 Emitting FILE_CREATED to server for Room: ${roomId}`);
+        console.log(`[DEBUG] 📦 Payload Files:`, updatedFiles);
+        
+        socketRef.current.emit(ACTIONS.FILE_CREATED, { roomId, files: updatedFiles });
+    } else {
+        console.error(`[DEBUG] ❌ Socket is NULL! Cannot emit FILE_CREATED.`);
+    }
+    
+    toast.success(`${type === 'folder' ? 'Folder' : 'File'} created!`);
+    return true;
+};
 
     const deleteFile = (fileName) => {
         // ... (Keep existing delete logic)
@@ -149,7 +163,7 @@ const useFileSystem = (initialFiles, socketRef, roomId) => {
         fileHistoryRef,
         updateFileContent,
         switchFile,
-        createNewFile,
+        createNewItem,
         deleteFile
     };
 };

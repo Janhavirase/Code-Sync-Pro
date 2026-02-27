@@ -40,18 +40,18 @@ const CommentsPanel = ({ comments, onAddComment, activeLine, onLineSelect }) => 
                         Right-click a line in the editor to start.
                     </div>
                 ) : (
-                    comments.map((c) => (
-                        <div 
-                            key={c.id || Math.random()} 
-                            onClick={() => {
-                                if (onLineSelect) onLineSelect(parseInt(c.line), false);
-                            }}
-                            className={`group p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
-                                parseInt(c.line) === parseInt(activeLine) 
-                                ? 'bg-green-500/10 border-green-500/40 shadow-lg scale-[1.02]' 
-                                : 'bg-white/5 border-transparent hover:bg-white/10'
-                            }`}
-                        >
+
+    comments.map((c) => (
+        <div 
+            key={c.id} 
+            onClick={() => onLineSelect(c.line)} 
+            className={`group p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
+                parseInt(c.line) === parseInt(activeLine) 
+                ? 'bg-green-500/10 border-green-500/40 shadow-lg scale-[1.02]' 
+                : 'bg-white/5 border-transparent hover:bg-white/10'
+            }`}
+        >
+          
                             <div className="flex justify-between items-center mb-1">
                                 <span className="text-xs font-black text-green-400">{c.username}</span>
                                 <div className="flex items-center gap-2 text-[10px] text-gray-500">

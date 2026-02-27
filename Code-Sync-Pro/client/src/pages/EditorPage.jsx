@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ACTIONS } from '../Actions';
 import ClientAvatar from '../components/ClientAvatar';
 import Editor from '../components/Editor';
+import FileSidebar from "../components/FileSidebar"; 
 import { initSocket } from '../socket';
 import { useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import Peer from 'simple-peer';
@@ -49,7 +50,7 @@ const EditorPage = () => {
 
     const { 
         files, setFiles, activeFileName, setActiveFileName, activeFileNameRef, 
-        codeRef, fileHistoryRef, switchFile, createNewFile, deleteFile, 
+        codeRef, fileHistoryRef, switchFile, createNewItem, deleteFile, 
         updateFileContent 
     } = useFileSystem(initialFiles, socketRef, roomId);
 
@@ -81,14 +82,14 @@ const EditorPage = () => {
     const [isSocketConnected, setIsSocketConnected] = useState(false);
     const peersRef = useRef([]); 
     const [inviteCopied, setInviteCopied] = useState(false);
-
+    const [jumpToLine, setJumpToLine] = useState(null);
     // ✅ INTEGRATE VIDEO HOOK
     const { 
         stream, isCallActive, isScreenSharing, isMuted, isVideoOff, 
         startCall, endCall, startScreenShare, endScreenShare,
         toggleMic, toggleVideo, isBlurred, isRecording,
         toggleBlur, startRecording, stopRecording, getNetworkStats
-    } = useVideoCall(socketRef, roomId, peersRef);
+    } = useVideoCall(socketRef, roomId, peersRef,jumpToLine);
 
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
     const savedUser = getSavedUser();
@@ -232,7 +233,11 @@ const EditorPage = () => {
             toast.success("Call invitation sent!");
         }
     };
-
+const handleCommentClick = (line) => {
+    setJumpToLine(line);
+    // Reset after a short delay so the same line can be clicked again
+    setTimeout(() => setJumpToLine(null), 100); 
+};
     const handleCodeChange = (newCode) => {
         if (isTimeTravelActiveRef.current) return;
         updateFileContent(activeFileName, newCode);
@@ -372,27 +377,45 @@ const EditorPage = () => {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2">
-                    {activeSidebarTab === 'files' && (
-                        <div className="flex flex-col gap-1">
-                            <div className="flex justify-between items-center px-2 py-1 mb-1">
-                                <div className="text-xs text-gray-500 uppercase font-bold">Explorer</div>
-                                <button onClick={() => setIsCreatingFile(true)} className="text-gray-400 hover:text-white text-lg font-bold p-1">+</button>
-                            </div>
-                            {isCreatingFile && (
-                                <div className="flex items-center px-2 mb-2 animate-fadeIn">
-                                    <span className="text-gray-400 mr-1">📄</span>
-                                    <input autoFocus className="bg-[#333] text-white text-xs p-1 rounded w-full border border-blue-500 outline-none" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFile(); if (e.key === 'Escape') setIsCreatingFile(false); }} onBlur={() => setIsCreatingFile(false)} placeholder="filename.js" />
-                                </div>
-                            )}
-                            {files.map((file, index) => (
-                                <div key={index} onClick={() => handleSwitchFile(file.name)} className={`group p-2 text-left rounded text-sm flex items-center justify-between cursor-pointer transition-colors ${activeFileName === file.name ? 'bg-[#37373d] text-white border-l-2 border-green-500' : 'text-gray-400 hover:bg-[#2a2a2a]'}`}>
-                                    <div className="flex items-center gap-2 overflow-hidden"><span className="opacity-50 font-mono text-xs">{file.language.toUpperCase().slice(0,2)}</span><span className="truncate">{file.name}</span></div>
-                                    <button onClick={(e) => deleteFileHandler(e, file.name)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-500 transition-opacity p-1 rounded hover:bg-[#252526]">🗑</button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    
+                  {activeSidebarTab === 'files' && (
+    <FileSidebar 
+        // 1. Safely map files so the new UI can read them
+        items={files.map(f => ({ 
+            ...f, 
+            id: f.id || f.name, 
+            type: f.type || 'file',
+            parentId: f.parentId || null
+        }))}
+        
+        // 2. Highlight the currently active file
+        activeFileId={activeFileName} 
+        
+        // 3. Connect to your existing switch handler
+ // 3. 🚨 THE FIX: Find the file's real name before switching!
+    onFileClick={(id) => {
+        const clickedFile = files.find(f => f.id === id || f.name === id);
+        if (clickedFile) {
+            handleSwitchFile(clickedFile.name); // Pass the NAME, not the ID!
+        }
+    }}
+    
+    onCreateItem={(type, parentId = null) => {
+        const itemName = prompt(`Enter ${type} name:`);
+        if (itemName) {
+            createNewItem(itemName, type, parentId);
+        }
+    }}
+    
+    // 5. 🚨 THE FIX: Find the file's real name before deleting!
+    onDeleteItem={(id) => {
+        const fileToDelete = files.find(f => f.id === id || f.name === id);
+        if (fileToDelete) {
+            const dummyEvent = { stopPropagation: () => {} };
+            deleteFileHandler(dummyEvent, fileToDelete.name); // Pass the NAME, not the ID!
+        }
+    }}
+    />
+)}
                     {/* 💬 RESTORED: Comments Panel Component */}
                  {/* 💬 RESTORED: Comments Panel Component */}
                   {/* ✅ NEW WAY (Passes all comments so the list works) */}
@@ -400,6 +423,7 @@ const EditorPage = () => {
     <CommentsPanel 
         comments={comments} // Pass everything!
         activeLine={activeLine}
+        onLineSelect={handleCommentClick}
         onAddComment={handleAddComment}
         onClose={() => setActiveSidebarTab('files')}
     />
@@ -484,6 +508,7 @@ const EditorPage = () => {
                                 language={files.find(f => f.name === activeFileName)?.language || 'javascript'}
                                 code={isTimeTravelActive ? (fileHistoryRef.current[activeFileName]?.[playbackIndex] || '') : (files.find(f => f.name === activeFileName)?.value || '')} 
                                 onCodeChange={handleCodeChange}
+                                jumpToLine={jumpToLine}
                                 // 💬 RESTORED: Active Line for Comments
                                 onLineSelect={(line, forceOpen) => { setActiveLine(line); if (forceOpen) setActiveSidebarTab('comments'); }}
                                 comments={comments} 
