@@ -19,7 +19,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import DeployModal from '../components/DeployModal';
 import { 
-    Files, Users, MessageSquare, Bot, MessageCircle, Folder,Sparkles,
+    Files, Users, MessageSquare, Bot, MessageCircle, Folder,Sparkles,ArrowLeft,
     Settings, Play, Loader2, Download, Share2, PanelLeftOpen, PanelLeftClose,
     ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save,QrCode, Copy, LogOut
 } from 'lucide-react';
@@ -343,7 +343,23 @@ const handleCommentClick = (line) => {
         socketRef.current.emit('comment:new', { roomId, comment: newComment });
     }
 };
+// 1. Add this function inside your component, before the return statement
+const handleLogout = () => {
+    // Step 1: Disconnect the WebSocket so their avatar/cursor leaves the room immediately
+    if (socketRef && socketRef.current) {
+        socketRef.current.disconnect();
+    }
 
+    // Step 2: Clear the JWT Token and User Data from the browser
+    localStorage.removeItem('token');
+    localStorage.removeItem('user'); // Or whatever key you used to save the user object
+
+    // Step 3: Show a clean exit message
+    toast.success("Logged out successfully. See you next time!");
+
+    // Step 4: Redirect them to the Auth/Login page (Adjust the route if your login is at '/login' instead)
+    navigate('/auth'); 
+};
     const toggleTimeTravel = () => {
         if (!isTimeTravelActive) {
             savedLiveCodeRef.current = codeRef.current;
@@ -366,6 +382,30 @@ const handleCommentClick = (line) => {
     const handleTimeTravelChange = (e) => {
         setPlaybackIndex(parseInt(e.target.value));
     };
+
+const handleUpdatePassword = async (currentPassword, newPassword) => {
+    try {
+        const response = await fetch('http://localhost:5000/api/auth/update-password', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user._id, // Pass the logged-in user's ID
+                currentPassword,
+                newPassword
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            toast.success("Password updated securely!");
+        } else {
+            toast.error(data.msg); // Shows "Incorrect current password", etc.
+        }
+    } catch (error) {
+        toast.error("Failed to update password.");
+    }
+};
 
     const handleCreateFile = () => {
         if(createNewFile(newFileName)) {
@@ -423,175 +463,186 @@ const handleCommentClick = (line) => {
     return (
         <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
             {/* SIDEBAR */}
-<aside className={`
-    ${isSidebarOpen ? 'w-80' : 'w-0'} 
-    transition-all duration-300 ease-in-out 
-    bg-[#181818] border-r border-[#333] flex flex-col z-20 shrink-0 shadow-2xl overflow-hidden
-`}>              {/* 🌟 Premium Branding Header */}
-<div className="flex items-center gap-3 px-4 py-6 mb-2 group transition-all duration-300 border-b border-[#333]/30">
-    {/* The Sleek "C" Logo */}
-    <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#a855f7] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 transform group-hover:rotate-6 group-hover:scale-110 transition-all duration-300 shrink-0">
-        <span className="text-white text-xl font-black">C</span>
-    </div>
-
-    <div className="flex items-baseline gap-1.5">
-        <h1 className="text-white font-black text-xl tracking-tighter transition-colors">
-            CodeSync
-        </h1>
-        {/* "Editor" in Light weight for that Senior Dev Tool look */}
-        <span className="text-gray-400 font-extralight text-lg tracking-tight opacity-80">
-            Editor
-        </span>
-    </div>
-    {/* 🎯 The "Close/Collapse" Button */}
-    <button 
-        onClick={() => setIsSidebarOpen(false)}
-        className="p-1.5 rounded-md text-gray-500 hover:bg-[#2a2a2a] hover:text-white transition-colors"
-        title="Close Sidebar"
-    >
-        <PanelLeftClose size={20} />
-    </button>
-
-</div>
-{/* 🚀 Professional Activity Bar - Logic preserved with activeSidebarTab */}
-{/* 🚀 High-Visibility Pro Activity Bar */}
-{/* 🚀 Refined Pro Activity Bar - Thin, Sharp, and Spaced */}
-<div className="flex items-center justify-around bg-[#1e1e1e] border-b border-[#333] shrink-0 h-14 relative">
-    {[
-        { id: 'files', icon: Folder, label: 'Explorer' },
-        { id: 'comments', icon: MessageCircle, label: 'Comments' },
-        { id: 'users', icon: Users, label: 'People' },
-        { id: 'chat', icon: MessageSquare, label: 'Chat' },
-        { id: 'ai', icon: Sparkles, label: 'AI Doctor' },
-    ].map((tab) => {
-        const Icon = tab.icon;
-        const isActive = activeSidebarTab === tab.id;
-
-        return (
-            <button
-                key={tab.id}
-                onClick={() => setActiveSidebarTab(tab.id)}
-                className={`relative flex-1 h-full flex flex-col items-center justify-center gap-1 transition-all duration-300
-                    ${isActive ? 'bg-[#252526]' : 'hover:bg-[#2a2a2a]'}`}
-            >
-                {/* 🌈 Icon - Sized down to 18 for elegance */}
-                <Icon 
-                    size={18} 
-                    className={`transition-all duration-300 
-                        ${isActive 
-                            ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' 
-                            : 'text-gray-500 hover:text-gray-300'}`} 
-                />
-
-                {/* 🏷️ Label - Thinner, Spaced, and Smaller */}
-                <span className={`text-[8px] font-medium uppercase tracking-[0.1em] transition-colors duration-300
-                    ${isActive ? 'text-white' : 'text-gray-500'}`}>
-                    {tab.label}
-                </span>
-
-                {/* ✨ Minimalist Bottom Indicator */}
-                <div className={`absolute bottom-0 left-0 right-0 h-[1.5px] transition-all duration-500
-                    ${isActive 
-                        ? 'bg-indigo-500 scale-x-75 shadow-[0_0_10px_#6366f1]' 
-                        : 'bg-transparent scale-x-0'}`} 
-                />
-            </button>
-        );
-    })}
-</div>
-                <div className="flex-1 overflow-y-auto p-2">
-                  {activeSidebarTab === 'files' && (
-    <FileSidebar 
-        // 1. Safely map files so the new UI can read them
-        items={files.map(f => ({ 
-            ...f, 
-            id: f.id || f.name, 
-            type: f.type || 'file',
-            parentId: f.parentId || null
-        }))}
-        clients={clients}                // 🚨 Pass the users down!
-    currentUser={user?.username}
-        // 2. Highlight the currently active file
-        activeFileId={activeFileName} 
+{/* 🚀 THE SPLIT SIDEBAR ARCHITECTURE */}
+<div className="flex h-full shrink-0 z-20 shadow-2xl">
+    
+    {/* 1️⃣ FIXED ACTIVITY BAR (Always Visible) */}
+    <div className="w-16 bg-[#1e1e1e] border-r border-[#333] flex flex-col items-center py-4 gap-2 z-30 justify-between">
         
-        // 3. Connect to your existing switch handler
- // 3. 🚨 THE FIX: Find the file's real name before switching!
-    onFileClick={(id) => {
-        const clickedFile = files.find(f => f.id === id || f.name === id);
-        if (clickedFile) {
-            handleSwitchFile(clickedFile.name); // Pass the NAME, not the ID!
-        }
-    }}
-    
-    onCreateItem={(type, parentId = null) => {
-        const itemName = prompt(`Enter ${type} name:`);
-        if (itemName) {
-            createNewItem(itemName, type, parentId);
-        }
-    }}
-    
-    // 5. 🚨 THE FIX: Find the file's real name before deleting!
-    onDeleteItem={(id) => {
-        const fileToDelete = files.find(f => f.id === id || f.name === id);
-        if (fileToDelete) {
-            const dummyEvent = { stopPropagation: () => {} };
-            deleteFileHandler(dummyEvent, fileToDelete.name); // Pass the NAME, not the ID!
-        }
-    }}
-    />
-)}
-                    {/* 💬 RESTORED: Comments Panel Component */}
-                 {/* 💬 RESTORED: Comments Panel Component */}
-                  {/* ✅ NEW WAY (Passes all comments so the list works) */}
-{activeSidebarTab === 'comments' && (
-    <CommentsPanel 
-        comments={comments} // Pass everything!
-        activeLine={activeLine}
-        onLineSelect={handleCommentClick}
-        onAddComment={handleAddComment}
-        onClose={() => setActiveSidebarTab('files')}
-    />
-)}
-                    
-                    {activeSidebarTab === 'users' && <div className="grid grid-cols-3 gap-3 p-2">{clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}</div>}
-{/* 🚨 THE FIX: Use CSS to hide it instead of unmounting it! */}
-   <div className={`h-full flex flex-col ${activeSidebarTab === 'chat' ? 'flex' : 'hidden'}`}>
-        {/* 🚨 THE FIX: Wait for the socket to exist before rendering! */}
-        {isSocketConnected && socketRef.current && (
-            <Chat socketRef={socketRef} roomId={roomId} username={user?.username} />
-        )}
-    </div>       
-                 {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
-                </div>
+        {/* Top Section: Logo & Tabs */}
+        <div className="flex flex-col items-center gap-4 w-full">
+            {/* Sleek Minimal Logo */}
+            <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#a855f7] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 mb-4 cursor-pointer transform hover:rotate-6 hover:scale-110 transition-all duration-300 shrink-0" title="CodeSync">
+                <span className="text-white text-xl font-black">C</span>
+            </div>
 
-               {/* 🌟 PREMIUM COMPACT FOOTER (Paste this here instead!) */}
-<div className="flex items-center justify-between p-3 border-t border-[#333] bg-[#1e1e1e] shrink-0 relative">
-    
-    {/* Floating QR Code Modal */}
-    {showQR && (
-        <div className="absolute bottom-14 left-4 p-3 bg-white rounded-xl shadow-2xl animate-fadeIn z-50 border border-gray-200">
-            <QRCode value={roomId} size={120} />
-            <div className="text-center text-xs text-gray-800 font-bold mt-2">Scan to Join</div>
+            {/* Vertical Navigation Icons */}
+            {[
+                { id: 'files', icon: Folder, label: 'Explorer' },
+                { id: 'comments', icon: MessageCircle, label: 'Comments' },
+                { id: 'users', icon: Users, label: 'People' },
+                { id: 'chat', icon: MessageSquare, label: 'Chat' },
+                { id: 'ai', icon: Sparkles, label: 'AI Doctor' },
+            ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeSidebarTab === tab.id;
+
+                return (
+                    <button
+                        key={tab.id}
+                       onClick={() => {
+    if (isActive) {
+        // If it's already active, just toggle the drawer open/closed
+        setIsSidebarOpen(!isSidebarOpen);
+    } else {
+        // If it's a different tab, switch to it and force the drawer open
+        setActiveSidebarTab(tab.id);
+        setIsSidebarOpen(true);
+    }
+}}
+                        className={`relative w-full aspect-square flex flex-col items-center justify-center gap-1 transition-all duration-300 group
+                            ${isActive ? 'bg-[#252526]' : 'hover:bg-[#2a2a2a]'}`}
+                        title={tab.label}
+                    >
+                        <Icon 
+                            size={18} 
+                            className={`transition-all duration-300 
+                                ${isActive ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'text-gray-500 group-hover:text-gray-300'}`} 
+                        />
+                        
+                        <span className={`text-[8px] font-medium uppercase tracking-[0.1em] transition-colors duration-300
+                            ${isActive ? 'text-white' : 'text-gray-500'}`}>
+                            {tab.label}
+                        </span>
+                        
+                        {/* Vertical Active Indicator (Left Edge) */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-[2px] transition-all duration-500
+                            ${isActive ? 'bg-indigo-500 scale-y-100 shadow-[0_0_10px_#6366f1]' : 'bg-transparent scale-y-0'}`} 
+                        />
+                    </button>
+                );
+            })}
         </div>
-    )}
 
-    <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-colors" title="Settings">
-        <Settings size={18} />
-    </button>
-    
-    <div className="flex items-center gap-1">
-        <button onClick={() => setShowQR(!showQR)} className={`p-2 rounded-lg transition-colors ${showQR ? 'bg-[#2a2a2a] text-white' : 'text-gray-400 hover:text-white hover:bg-[#2a2a2a]'}`} title="Room QR Code">
-            <QrCode size={18} />
-        </button>
-        <button onClick={copyRoomId} className="p-2 text-emerald-500 hover:text-emerald-400 hover:bg-[#2a2a2a] rounded-lg transition-colors" title="Copy Room ID">
-            <Copy size={18} />
-        </button>
-        <button onClick={() => navigate('/')} className="p-2 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Leave Room">
-            <LogOut size={18} />
-        </button>
+        {/* Bottom Section: Compact Footer Tools */}
+        <div className="flex flex-col items-center gap-2 w-full pt-4 border-t border-[#333]/50 relative">
+            
+            {/* Floating QR Code Modal */}
+           {/* 📱 Floating QR Code Modal (Fixed Positioning) */}
+{showQR && (
+    <div className="fixed bottom-4 left-20 p-3 bg-white rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.5)] animate-fadeIn z-[9999] border border-gray-200 flex flex-col items-center">
+        <QRCode value={roomId} size={120} />
+        <div className="text-center text-[10px] text-gray-800 font-black uppercase tracking-widest mt-3">
+            Scan to Join
+        </div>
+    </div>
+)}
+
+            <button onClick={() => setIsSettingsOpen(true)} className="p-3 text-gray-500 hover:text-white hover:bg-[#2a2a2a] rounded-xl transition-colors w-full flex justify-center" title="Settings">
+                <Settings size={18} />
+            </button>
+            <button onClick={() => setShowQR(!showQR)} className={`p-3 rounded-xl transition-colors w-full flex justify-center ${showQR ? 'bg-[#2a2a2a] text-white' : 'text-gray-500 hover:text-white hover:bg-[#2a2a2a]'}`} title="Room QR Code">
+                <QrCode size={18} />
+            </button>
+            <button onClick={copyRoomId} className="p-3 text-emerald-600/70 hover:text-emerald-400 hover:bg-[#2a2a2a] rounded-xl transition-colors w-full flex justify-center" title="Copy Room ID">
+                <Copy size={18} />
+            </button>
+            <button onClick={() => navigate('/')} className="p-3 text-red-600/70 hover:text-red-400 hover:bg-[#2a2a2a] rounded-xl transition-colors w-full flex justify-center mb-2" title="Leave Room">
+                <LogOut size={18} />
+            </button>
+        </div>
+    </div>
+
+    {/* 2️⃣ COLLAPSIBLE DRAWER (Slides Left/Right) */}
+    <div className={`
+        ${isSidebarOpen ? 'w-64 border-r' : 'w-0 border-r-0'} 
+        transition-all duration-300 ease-in-out 
+        bg-[#181818] border-[#333] flex flex-col overflow-hidden relative z-20
+    `}>
+        {/* Drawer Header with Close Button */}
+        <div className="flex items-center justify-between px-4 h-[72px] border-b border-[#333]/30 shrink-0 bg-[#1e1e1e]/50 backdrop-blur-sm">
+            <span className="text-xs font-black text-gray-300 uppercase tracking-widest">
+                {activeSidebarTab === 'files' ? 'Explorer' : activeSidebarTab}
+            </span>
+            <button 
+                onClick={() => setIsSidebarOpen(false)}
+                className="p-1.5 rounded-md text-gray-500 hover:bg-[#2a2a2a] hover:text-white transition-colors border border-transparent hover:border-[#444]"
+                title="Collapse Sidebar"
+            >
+                <PanelLeftClose size={16} />
+            </button>
+        </div>
+
+        {/* 🚨 EXACT LOGIC RETAINED HERE 🚨 */}
+        <div className="flex-1 overflow-y-auto p-2">
+            
+            {activeSidebarTab === 'files' && (
+                <FileSidebar 
+                    items={files.map(f => ({ 
+                        ...f, 
+                        id: f.id || f.name, 
+                        type: f.type || 'file',
+                        parentId: f.parentId || null
+                    }))}
+                    clients={clients}
+                    currentUser={user?.username}
+                    activeFileId={activeFileName} 
+                    onFileClick={(id) => {
+                        const clickedFile = files.find(f => f.id === id || f.name === id);
+                        if (clickedFile) {
+                            handleSwitchFile(clickedFile.name);
+                        }
+                    }}
+                    onCreateItem={(type, parentId = null) => {
+                        const itemName = prompt(`Enter ${type} name:`);
+                        if (itemName) {
+                            createNewItem(itemName, type, parentId);
+                        }
+                    }}
+                    onDeleteItem={(id) => {
+                        const fileToDelete = files.find(f => f.id === id || f.name === id);
+                        if (fileToDelete) {
+                            const dummyEvent = { stopPropagation: () => {} };
+                            deleteFileHandler(dummyEvent, fileToDelete.name);
+                        }
+                    }}
+                />
+            )}
+
+            {activeSidebarTab === 'comments' && (
+                <CommentsPanel 
+                    comments={comments} 
+                    activeLine={activeLine}
+                    onLineSelect={handleCommentClick}
+                    onAddComment={handleAddComment}
+                    onClose={() => setActiveSidebarTab('files')}
+                />
+            )}
+
+            {activeSidebarTab === 'users' && (
+                <div className="grid grid-cols-3 gap-3 p-2">
+                    {clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}
+                </div>
+            )}
+
+            <div className={`h-full flex flex-col ${activeSidebarTab === 'chat' ? 'flex' : 'hidden'}`}>
+                {isSocketConnected && socketRef.current && (
+                    <Chat socketRef={socketRef} roomId={roomId} username={user?.username} />
+                )}
+            </div>       
+
+            {activeSidebarTab === 'ai' && (
+                <div className="h-full overflow-hidden">
+                    <AIAnalysisPanel 
+                        currentCode={files.find(f => f.name === activeFileName)?.value} 
+                        language={files.find(f => f.name === activeFileName)?.language || 'javascript'} 
+                        onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} 
+                    />
+                </div>
+            )}
+        </div>
     </div>
 </div>
-            </aside>
 
             {/* MAIN AREA */}
             <main className="flex-1 flex flex-col relative overflow-hidden bg-[#1e1e1e] min-w-0">
@@ -611,8 +662,14 @@ const handleCommentClick = (line) => {
                 )}
                 <div className="h-12 bg-[#1e1e1e] flex items-center justify-between px-4 border-b border-[#333]">
                     <div className="flex gap-2 items-center">
-                        <button onClick={() => navigate('/dashboard', { state: { user: user || getSavedUser() } })} className="text-gray-400 hover:text-white flex items-center gap-1 text-xs transition-colors mr-4">⬅ Dashboard</button>
-                        <div className="flex bg-[#252526] rounded-md p-1 border border-[#333]">
+{/* 🚀 Premium Dashboard Button (Logic Preserved!) */}
+<button 
+    onClick={() => navigate('/dashboard', { state: { user: user || getSavedUser() } })} 
+    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400 bg-[#252526] hover:bg-[#2a2a2a] hover:text-white rounded-lg transition-all border border-[#333] hover:border-[#555] shadow-sm group mr-4 shrink-0"
+>
+    <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform text-indigo-400" />
+    Dashboard
+</button>                        <div className="flex bg-[#252526] rounded-md p-1 border border-[#333]">
                             <button onClick={() => setActiveMainView('editor')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'editor' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Code</button>
                             <button onClick={() => setActiveMainView('board')} className={`px-3 py-1 rounded-sm text-xs font-bold transition-all ${activeMainView === 'board' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}>Whiteboard</button>
                         </div>
@@ -747,8 +804,22 @@ const handleCommentClick = (line) => {
                 />
             )}
             
-            <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} user={{ username: user?.username }} onSaveSettings={(settings) => { setEditorTheme(settings.theme); setEditorFontSize(parseInt(settings.fontSize)); setEditorFontFamily(settings.fontFamily); setEditorWordWrap(settings.wrapText); toast.success("Settings Updated! 🎨"); }} />
-       {isDeployModalOpen && (
+<SettingsModal 
+    isOpen={isSettingsOpen} 
+    onClose={() => setIsSettingsOpen(false)} 
+    user={user} // 👈 Pass the full user object so the email displays!
+    onSaveSettings={(settings) => { 
+        setEditorTheme(settings.theme); 
+        setEditorFontSize(parseInt(settings.fontSize)); 
+        setEditorFontFamily(settings.fontFamily); 
+        setEditorWordWrap(settings.wrapText); 
+        toast.success("Settings Updated! 🎨"); 
+    }} 
+    onUpdatePassword={handleUpdatePassword} // 👈 Add the password handler
+    onLogout={handleLogout}                 // 👈 Add the logout handler
+/>  
+
+   {isDeployModalOpen && (
                 <DeployModal 
                     isOpen={isDeployModalOpen} 
                     onClose={() => setIsDeployModalOpen(false)} 

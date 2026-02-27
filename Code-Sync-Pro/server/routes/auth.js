@@ -67,5 +67,37 @@ router.post('/login', async (req, res) => {
         res.status(500).send('Server Error');
     }
 });
+// UPDATE PASSWORD ROUTE (Secure)
+router.put('/update-password', async (req, res) => {
+    // Note: In a fully strict production app, you would get userId from a JWT middleware (e.g., req.user.id).
+    // For now, we accept it from the secure frontend payload.
+    const { userId, currentPassword, newPassword } = req.body;
 
+    try {
+        // 1. Find the user in the database
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        // 2. Verify the current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ msg: 'Incorrect current password. Please try again.' });
+        }
+
+        // 3. Hash the NEW password
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+
+        // 4. Save the updated user
+        await user.save();
+
+        res.json({ msg: 'Password updated successfully' });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 module.exports = router;
