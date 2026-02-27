@@ -68,7 +68,8 @@ const EditorPage = () => {
     const [activeSidebarTab, setActiveSidebarTab] = useState('files');
     const [activeMainView, setActiveMainView] = useState('editor');
     const [activeBottomTab, setActiveBottomTab] = useState('console');
-    
+    // Add this near your other useState hooks
+const [isOffline, setIsOffline] = useState(false);
     // 💬 RESTORED: Comments State
     const [comments, setComments] = useState([]);
     const [activeLine, setActiveLine] = useState(null);
@@ -96,7 +97,26 @@ const EditorPage = () => {
     const user = location.state?.user || (location.state?.username ? location.state : savedUser);
     const userId = location.state?.userId || user?.user?._id || user?._id || user?.id;
     const isHost = location.state?.isHost || !!userId;
+// 🚨 INSTANT OFFLINE DETECTOR
+    useEffect(() => {
+        const handleOffline = () => {
+            setIsOffline(true);
+            toast.error("WiFi dropped. Reconnecting...", { id: 'network-status', duration: Infinity, icon: '📡' });
+        };
+        const handleOnline = () => {
+            setIsOffline(false);
+            toast.success("Back online! Syncing...", { id: 'network-status', duration: 3000 });
+        };
 
+        // Listen to the computer's actual network adapter
+        window.addEventListener('offline', handleOffline);
+        window.addEventListener('online', handleOnline);
+
+        return () => {
+            window.removeEventListener('offline', handleOffline);
+            window.removeEventListener('online', handleOnline);
+        };
+    }, []);
     useEffect(() => {
         const timeout = setTimeout(() => {
             const htmlFile = files.find(f => f.name === 'index.html') || files.find(f => f.name.endsWith('.html'));
@@ -218,6 +238,32 @@ socketRef.current.on('user:active_file', ({ username, fileName }) => {
                 const peerObj = peersRef.current.find(p => p.peerID === socketId);
                 if(peerObj) peerObj.peer.destroy();
                 peersRef.current = peersRef.current.filter(p => p.peerID !== socketId);
+            });
+            // 🛑 CATCH THE DISCONNECT (Paste here!)
+            socketRef.current.on('disconnect', (reason) => {
+                console.warn(`[NETWORK] Disconnected: ${reason}`);
+                setIsOffline(true); // Triggers the red banner
+                toast.error("WiFi dropped. Reconnecting...", { 
+                    id: 'network-status', 
+                    duration: Infinity,   
+                    icon: '📡'
+                });
+            });
+
+            // 🟢 CATCH THE RECONNECT
+            socketRef.current.io.on('reconnect', (attempt) => {
+                console.log(`[NETWORK] Reconnected after ${attempt} attempts`);
+                setIsOffline(false); // Hides the red banner
+                toast.success("Back online! Syncing files...", { 
+                    id: 'network-status', 
+                    duration: 3000 
+                });
+
+                // Re-sync the state
+                socketRef.current.emit(ACTIONS.JOIN, { 
+                    roomId, 
+                    username: user?.username 
+                });
             });
         };
 
@@ -446,8 +492,14 @@ const handleCommentClick = (line) => {
 )}
                     
                     {activeSidebarTab === 'users' && <div className="grid grid-cols-3 gap-3 p-2">{clients.map((client) => <ClientAvatar key={client.socketId} username={client.username} />)}</div>}
-                    {activeSidebarTab === 'chat' && <div className="h-full flex flex-col"><Chat socketRef={socketRef} roomId={roomId} username={user?.username} /></div>}
-                    {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
+{/* 🚨 THE FIX: Use CSS to hide it instead of unmounting it! */}
+   <div className={`h-full flex flex-col ${activeSidebarTab === 'chat' ? 'flex' : 'hidden'}`}>
+        {/* 🚨 THE FIX: Wait for the socket to exist before rendering! */}
+        {isSocketConnected && socketRef.current && (
+            <Chat socketRef={socketRef} roomId={roomId} username={user?.username} />
+        )}
+    </div>       
+                 {activeSidebarTab === 'ai' && <div className="h-full overflow-hidden"><AIAnalysisPanel currentCode={files.find(f => f.name === activeFileName)?.value} language={files.find(f => f.name === activeFileName)?.language || 'javascript'} onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} /></div>}
                 </div>
 
                 <div className="p-4 border-t border-[#333] flex flex-col gap-2 bg-[#181818]">
@@ -463,6 +515,12 @@ const handleCommentClick = (line) => {
 
             {/* MAIN AREA */}
             <main className="flex-1 flex flex-col relative overflow-hidden bg-[#1e1e1e] min-w-0">
+            {isOffline && (
+                    <div className="bg-red-600 text-white text-xs font-bold py-1 px-4 flex justify-center items-center gap-2 animate-pulse z-50">
+                        <span>⚠️</span>
+                        Connection lost. Changes will not be saved or synced until you reconnect.
+                    </div>
+                )}
                 <div className="h-12 bg-[#1e1e1e] flex items-center justify-between px-4 border-b border-[#333]">
                     <div className="flex gap-2 items-center">
                         <button onClick={() => navigate('/dashboard', { state: { user: user || getSavedUser() } })} className="text-gray-400 hover:text-white flex items-center gap-1 text-xs transition-colors mr-4">⬅ Dashboard</button>

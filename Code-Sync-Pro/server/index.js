@@ -260,7 +260,11 @@ socket.on('user:active_file', ({ roomId, username, fileName }) => {
         });
     });
     socket.on('send-message', ({ roomId, message, username, time }) => {
+        console.log(`🛑 [DEBUG] SERVER RECEIVED MESSAGE from ${username}: "${message}" intended for room: ${roomId}`);
+        
         socket.to(roomId).emit('receive-message', { message, username, time });
+        
+        console.log(`🚀 [DEBUG] SERVER BROADCASTED to room: ${roomId}`);
     });
 
     // 5. WHITEBOARD EVENTS
