@@ -20,7 +20,7 @@ import { saveAs } from 'file-saver';
 import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, Folder,Sparkles,
-    Settings, Play, Loader2, Download, Share2, 
+    Settings, Play, Loader2, Download, Share2, PanelLeftOpen, PanelLeftClose,
     ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save,QrCode, Copy, LogOut
 } from 'lucide-react';
 
@@ -73,7 +73,7 @@ const [isOffline, setIsOffline] = useState(false);
     // 💬 RESTORED: Comments State
     const [comments, setComments] = useState([]);
     const [activeLine, setActiveLine] = useState(null);
-    
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [liveRepoUrl, setLiveRepoUrl] = useState(null);
     const [srcDoc, setSrcDoc] = useState('');
     const [isTimeTravelActive, setIsTimeTravelActive] = useState(false);
@@ -423,8 +423,11 @@ const handleCommentClick = (line) => {
     return (
         <div className="flex h-screen bg-[#1e1e1e] text-white overflow-hidden">
             {/* SIDEBAR */}
-            <aside className="w-80 bg-[#181818] border-r border-[#333] flex flex-col z-20 shrink-0 shadow-2xl">
-              {/* 🌟 Premium Branding Header */}
+<aside className={`
+    ${isSidebarOpen ? 'w-80' : 'w-0'} 
+    transition-all duration-300 ease-in-out 
+    bg-[#181818] border-r border-[#333] flex flex-col z-20 shrink-0 shadow-2xl overflow-hidden
+`}>              {/* 🌟 Premium Branding Header */}
 <div className="flex items-center gap-3 px-4 py-6 mb-2 group transition-all duration-300 border-b border-[#333]/30">
     {/* The Sleek "C" Logo */}
     <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#a855f7] rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/20 transform group-hover:rotate-6 group-hover:scale-110 transition-all duration-300 shrink-0">
@@ -440,6 +443,15 @@ const handleCommentClick = (line) => {
             Editor
         </span>
     </div>
+    {/* 🎯 The "Close/Collapse" Button */}
+    <button 
+        onClick={() => setIsSidebarOpen(false)}
+        className="p-1.5 rounded-md text-gray-500 hover:bg-[#2a2a2a] hover:text-white transition-colors"
+        title="Close Sidebar"
+    >
+        <PanelLeftClose size={20} />
+    </button>
+
 </div>
 {/* 🚀 Professional Activity Bar - Logic preserved with activeSidebarTab */}
 {/* 🚀 High-Visibility Pro Activity Bar */}
@@ -583,6 +595,14 @@ const handleCommentClick = (line) => {
 
             {/* MAIN AREA */}
             <main className="flex-1 flex flex-col relative overflow-hidden bg-[#1e1e1e] min-w-0">
+                {!isSidebarOpen && (
+    <button 
+        onClick={() => setIsSidebarOpen(true)}
+        className="absolute top-4 left-4 z-50 p-2 bg-[#1e1e1e] border border-[#333] rounded-md text-gray-400 hover:text-white shadow-xl animate-fadeIn"
+    >
+        <PanelLeftOpen size={20} />
+    </button>
+)}
             {isOffline && (
                     <div className="bg-red-600 text-white text-xs font-bold py-1 px-4 flex justify-center items-center gap-2 animate-pulse z-50">
                         <span>⚠️</span>
