@@ -6,8 +6,9 @@ export const useCodeRunner = () => {
     const [isCompiling, setIsCompiling] = useState(false);
 
     // We pass the code and language directly into the function when the user clicks "Run"
-    const executeCode = async (sourceCode, language = 'javascript') => {
-        if (!sourceCode || !sourceCode.trim()) {
+// 🚨 Notice the third parameter added here!
+const executeCode = async (sourceCode, language = 'javascript', customInput = "") => {      
+      if (!sourceCode || !sourceCode.trim()) {
             setOutput("Error: No code to run!");
             return;
         }
@@ -15,14 +16,19 @@ export const useCodeRunner = () => {
         setIsCompiling(true);
         setOutput("Running in Docker Sandbox...\n");
 
-        try {
+      try {
             const response = await axios.post('http://localhost:5000/api/execute', {
                 code: sourceCode,
-                language: language 
+                language: language ,
+                input: customInput // 🚨 DID YOU ADD THIS LINE?
             });
             
-            // Set the terminal output to whatever Docker sends back!
-            setOutput(response.data.output);
+            // 🛡️ THE FIX: Check if the backend sent an error, an output, or nothing at all!
+            if (response.data.error) {
+                setOutput(`Error:\n${response.data.error}`);
+            } else {
+                setOutput(response.data.output || "Execution finished with no output.");
+            }
             
         } catch (error) {
             console.error("RCE Error:", error);

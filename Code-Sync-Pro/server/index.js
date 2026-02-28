@@ -43,6 +43,7 @@ app.use('/api/users', userRoutes); // <--- ✅ CONNECT THE NEW BRAIN HERE
 app.use('/api/templates', templateRoutes);
 app.use('/api/deploy', deployRoutes);
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/execute', require('./routes/execute'));
 // ❌ DELETED: The old manual 'app.get(/profile)' code is GONE.
 // Now the server will look inside 'routes/userRoutes.js' for instructions!
 app.use('/api/library', require('./routes/libraryRoutes'));

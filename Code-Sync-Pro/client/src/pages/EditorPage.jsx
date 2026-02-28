@@ -299,8 +299,7 @@ const handleCommentClick = (line) => {
     const handleRunCode = () => {
         const currentFile = files.find(f => f.name === activeFileName);
         const codeString = currentFile?.value || '';
-        executeCode(codeString, currentFile?.language || 'javascript'); 
-    };
+        executeCode(codeString, currentFile?.language || 'javascript', customInput);    };
 
     const handleSwitchFile = (name) => {
         switchFile(name);
@@ -762,7 +761,7 @@ const handleUpdatePassword = async (currentPassword, newPassword) => {
                                 </div>
                                 <div className="w-1/2 flex flex-col">
                                     <div className="bg-[#252526] px-2 py-0.5 text-[9px] text-gray-500 uppercase tracking-tighter">Stdout</div>
-                                    <pre className={`flex-1 p-2 text-xs font-mono overflow-auto whitespace-pre-wrap ${output.includes("Error") ? "text-red-400" : "text-blue-300"}`}>{output || "..."}</pre>
+                                    <pre className={`flex-1 p-2 text-xs font-mono overflow-auto whitespace-pre-wrap ${output?.includes("Error") ? "text-red-400" : "text-blue-300"}`}>{output || "..."}</pre>
                                 </div>
                             </div>
                             <div className={`w-full h-full bg-white ${activeBottomTab === 'preview' ? 'block' : 'hidden'}`}>
