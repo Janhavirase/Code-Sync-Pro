@@ -50,7 +50,7 @@ const EditorPage = () => {
 
     const { 
         files, setFiles, activeFileName, setActiveFileName, activeFileNameRef, 
-        codeRef, fileHistoryRef, switchFile, createNewItem, deleteFile, 
+        codeRef, fileHistoryRef, switchFile, createNewItem, deleteFile, handleBulkImport,
         updateFileContent 
     } = useFileSystem(initialFiles, socketRef, roomId);
 
@@ -584,6 +584,7 @@ const handleUpdatePassword = async (currentPassword, newPassword) => {
                         parentId: f.parentId || null
                     }))}
                     clients={clients}
+                    onBulkImport={handleBulkImport}
                     currentUser={user?.username}
                     activeFileId={activeFileName} 
                     onFileClick={(id) => {

@@ -14,7 +14,7 @@ const executeCode = async (sourceCode, language = 'javascript', customInput = ""
         }
 
         setIsCompiling(true);
-        setOutput("Running in Docker Sandbox...\n");
+        setOutput("Running ...\n");
 
       try {
             const response = await axios.post('http://localhost:5000/api/execute', {

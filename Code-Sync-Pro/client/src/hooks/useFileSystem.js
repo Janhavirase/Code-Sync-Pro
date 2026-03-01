@@ -92,6 +92,20 @@ const useFileSystem = (initialFiles, socketRef, roomId) => {
     };
 
   // We changed the arguments to accept the type ('file' or 'folder') and parentId
+// 🧠 NEW HELPER: Translates extensions to Monaco-approved language names!
+const getLanguageFromExtension = (filename) => {
+    const ext = filename.split('.').pop().toLowerCase();
+    if (ext === 'js') return 'javascript';
+    if (ext === 'py') return 'python';
+    if (ext === 'java') return 'java';
+    if (ext === 'c') return 'c';
+    if (ext === 'cpp') return 'cpp';
+    if (ext === 'html') return 'html';
+    if (ext === 'css') return 'css';
+    return 'plaintext'; // Fallback for unknown files
+};
+
+// We changed the arguments to accept the type ('file' or 'folder') and parentId
 const createNewItem = (itemName, type = 'file', parentId = null) => {
     // 🔍 DEBUG: Step 1 - Function Called
     console.log(`[DEBUG] 📂 createNewItem called for: "${itemName}", Type: ${type}`);
@@ -101,13 +115,13 @@ const createNewItem = (itemName, type = 'file', parentId = null) => {
         return false;
     }
     
-    // ✨ THE UPGRADE: Added id, type, parentId, and dynamic language
+    // ✨ THE UPGRADE: Using our new language translator!
     const newItem = { 
-        id: Date.now().toString(), // Unique ID for the new sidebar
+        id: Date.now().toString(), 
         name: itemName, 
-        type: type,                // 'file' or 'folder'
-        parentId: parentId,        // Enables nested folders in the UI
-        language: type === 'file' ? (itemName.split('.').pop() || 'javascript') : null, 
+        type: type,                
+        parentId: parentId,        
+        language: type === 'file' ? getLanguageFromExtension(itemName) : null, // 👈 FIX IS HERE
         value: type === 'file' ? '// New File' : null 
     };
     
@@ -116,16 +130,13 @@ const createNewItem = (itemName, type = 'file', parentId = null) => {
     // Update Local State
     setFiles(updatedFiles);
     
-    // Keep your exact history logic (but only apply it to files, not folders)
     if (type === 'file') {
         fileHistoryRef.current[itemName] = [newItem.value];
     }
     
-    // 🔍 DEBUG: Step 2 - Checking Socket (YOUR EXACT LOGIC)
+    // 🔍 DEBUG: Step 2 - Checking Socket
     if(socketRef.current) {
         console.log(`[DEBUG] 🚀 Emitting FILE_CREATED to server for Room: ${roomId}`);
-        console.log(`[DEBUG] 📦 Payload Files:`, updatedFiles);
-        
         socketRef.current.emit(ACTIONS.FILE_CREATED, { roomId, files: updatedFiles });
     } else {
         console.error(`[DEBUG] ❌ Socket is NULL! Cannot emit FILE_CREATED.`);
@@ -134,7 +145,30 @@ const createNewItem = (itemName, type = 'file', parentId = null) => {
     toast.success(`${type === 'folder' ? 'Folder' : 'File'} created!`);
     return true;
 };
+// ✨ NEW: Handles importing entire folders at once
+    const handleBulkImport = (newItemsArray) => {
+        // 1. Combine existing files with the newly imported ones
+        const updatedFiles = [...files, ...newItemsArray];
+        
+        // 2. Update local React state
+        setFiles(updatedFiles);
+        
+        // 3. Keep history for text files so the editor doesn't crash on load
+        newItemsArray.forEach(item => {
+            if (item.type === 'file' && item.value !== null) {
+                fileHistoryRef.current[item.name] = [item.value];
+            }
+        });
 
+        // 4. Broadcast to Socket.io so everyone in the room gets the whole folder instantly!
+        if (socketRef.current) {
+            console.log(`[DEBUG] 🚀 Emitting Bulk FILE_CREATED for Room: ${roomId}`);
+            socketRef.current.emit(ACTIONS.FILE_CREATED, { 
+                roomId, 
+                files: updatedFiles 
+            });
+        }
+    };
     const deleteFile = (fileName) => {
         // ... (Keep existing delete logic)
         if (files.length === 1) {
@@ -164,7 +198,8 @@ const createNewItem = (itemName, type = 'file', parentId = null) => {
         updateFileContent,
         switchFile,
         createNewItem,
-        deleteFile
+        deleteFile,
+        handleBulkImport
     };
 };
 

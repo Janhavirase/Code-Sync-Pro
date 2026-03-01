@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState,useRef } from 'react';
 import { 
     FileIcon, Folder, FolderOpen, FileCode2, FileJson, 
-    Image as ImageIcon, FileText, Plus, FolderPlus, 
+    Image as ImageIcon, FileText, Plus, FolderPlus, Upload,
     MoreVertical, Trash2, Edit2, ChevronRight, ChevronDown
 } from 'lucide-react';
-
+import toast from 'react-hot-toast';
 const FileSidebar = ({ 
     items = [], 
     activeFileId, 
     onFileClick, 
     onCreateItem, 
+    onBulkImport,
     onDeleteItem ,
     clients = [],        // 🚨 NEW: Receive the active users
     currentUser
@@ -17,7 +18,8 @@ const FileSidebar = ({
     // State to track which folders are open
     const [expandedFolders, setExpandedFolders] = useState(new Set(['root']));
     const [hoveredItemId, setHoveredItemId] = useState(null);
-
+// ✨ NEW: Ref for Folder Import
+    const fileInputRef = useRef(null);
     const toggleFolder = (folderId, e) => {
         e.stopPropagation();
         setExpandedFolders(prev => {
@@ -27,11 +29,92 @@ const FileSidebar = ({
             return next;
         });
     };
+// ✨ NEW: Folder Import Logic
+    const handleFolderImport = async (e) => {
+        const importedFiles = e.target.files;
+        if (!importedFiles || importedFiles.length === 0) return;
 
+        toast.loading("Parsing folder...", { id: 'importing' });
+
+        const MAX_FILES = 50; 
+        const MAX_FILE_SIZE = 1024 * 500; 
+        let fileCount = 0;
+        const newItems = [];
+        const folderMap = {};
+
+        const getLanguageFromExt = (name) => {
+            const ext = name.split('.').pop().toLowerCase();
+            const map = { js: 'javascript', py: 'python', java: 'java', c: 'c', cpp: 'cpp', html: 'html', css: 'css' };
+            return map[ext] || 'plaintext';
+        };
+
+        for (let i = 0; i < importedFiles.length; i++) {
+            const file = importedFiles[i];
+            const pathParts = file.webkitRelativePath.split('/');
+
+            if (pathParts.includes('node_modules') || pathParts.includes('.git') || pathParts.includes('dist')) continue;
+            if (file.size > MAX_FILE_SIZE || file.type.includes('image') || file.type.includes('video')) continue;
+
+            if (fileCount >= MAX_FILES) {
+                toast.error(`Folder is massive. Stopped at ${MAX_FILES} safe files.`, { id: 'importing' });
+                break;
+            }
+
+            let currentParentId = null;
+            let currentPath = '';
+
+            for (let j = 0; j < pathParts.length; j++) {
+                const part = pathParts[j];
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+                if (j === pathParts.length - 1) {
+                    try {
+                        const content = await file.text();
+                        newItems.push({
+                            id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                            name: part,
+                            type: 'file',
+                            parentId: currentParentId,
+                            language: getLanguageFromExt(part),
+                            value: content
+                        });
+                        fileCount++;
+                    } catch (err) {
+                        console.error(`Failed to read ${part}`);
+                    }
+                } else {
+                    if (!folderMap[currentPath]) {
+                        const newFolderId = `folder-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+                        folderMap[currentPath] = newFolderId;
+                        newItems.push({
+                            id: newFolderId,
+                            name: part,
+                            type: 'folder',
+                            parentId: currentParentId,
+                            language: null,
+                            value: null
+                        });
+                    }
+                    currentParentId = folderMap[currentPath]; 
+                }
+            }
+        }
+
+        if (newItems.length > 0 && onBulkImport) {
+            onBulkImport(newItems);
+            toast.success(`Imported ${fileCount} files successfully!`, { id: 'importing' });
+        } else {
+            toast.error("No valid files found.", { id: 'importing' });
+        }
+        e.target.value = null; 
+    };
     // 🎨 Smart Icon Selector based on file extension
     const getFileIcon = (filename) => {
         if (filename.endsWith('.js') || filename.endsWith('.jsx')) return <FileCode2 size={14} className="text-yellow-400" />;
         if (filename.endsWith('.css')) return <FileCode2 size={14} className="text-blue-400" />;
+        if (filename.endsWith('.java')) return <FileCode2 size={14} className="text-red-500" />;
+        if (filename.endsWith('.py')) return <FileCode2 size={14} className="text-yellow-400" />;
+        if (filename.endsWith('.c')) return <FileCode2 size={14} className="text-indigo-400" />;
         if (filename.endsWith('.html')) return <FileCode2 size={14} className="text-orange-400" />;
         if (filename.endsWith('.json')) return <FileJson size={14} className="text-green-400" />;
         if (filename.match(/\.(png|jpe?g|svg|gif)$/)) return <ImageIcon size={14} className="text-purple-400" />;
@@ -159,10 +242,22 @@ const FileSidebar = ({
                     <button onClick={() => onCreateItem('folder', null)} className="hover:text-white transition-colors" title="New Folder at Root">
                         <FolderPlus size={14} />
                     </button>
-                   
+                   {/* ✨ NEW UPLOAD BUTTON ADDED HERE */}
+                    <button onClick={() => fileInputRef.current?.click()} className="hover:text-white transition-colors" title="Import Folder">
+                        <Upload size={14} />
+                    </button>
                 </div>
             </div>
-
+{/* ✨ NEW HIDDEN INPUT FOR BULK UPLOAD ADDED HERE */}
+            <input 
+                type="file" 
+                webkitdirectory="true" 
+                directory="true" 
+                multiple 
+                style={{ display: 'none' }} 
+                ref={fileInputRef} 
+                onChange={handleFolderImport} 
+            />
             {/* Tree Area */}
             <div className="flex-1 overflow-y-auto custom-scrollbar py-2">
                 {items.length === 0 ? (
