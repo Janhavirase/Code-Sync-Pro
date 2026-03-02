@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 
-const DeployModal = ({ project, onClose ,onSuccess}) => {
+const DeployModal = ({ project, onClose ,files,onSuccess}) => {
     // 1. New States for Form
     const [status, setStatus] = useState('idle'); 
     const [repoUrl, setRepoUrl] = useState('');
@@ -11,19 +11,26 @@ const DeployModal = ({ project, onClose ,onSuccess}) => {
 const [isPrivate, setIsPrivate] = useState(false);
    const handleDeploy = async () => {
     if (!deployName.trim()) return toast.error("Please name your repository");
-
+     // ✨ 1. Grab the token from local storage!
+        const token = localStorage.getItem('github_token');
     setStatus('deploying');
     try {
+        console.log("🚀 Data being sent:", { 
+    title: deployName, 
+    token: token ? "Exists" : "MISSING", 
+    filesCount: files?.length 
+});
         const res = await fetch('http://127.0.0.1:5000/api/deploy/github', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json','Authorization': `Bearer ${token}` },
             body: JSON.stringify({
                 title: deployName,
                 desc: deployDesc,
                 isPrivate: isPrivate,
                 code: project.code,
                 language: project.language,
-                roomId: project.roomId // ✅ Added: This is crucial for the MongoDB update
+                roomId: project.roomId, // ✅ Added: This is crucial for the MongoDB update
+                files: files
             })
         });
 
@@ -36,6 +43,7 @@ const [isPrivate, setIsPrivate] = useState(false);
             toast.success("Shipped to GitHub! 🚀");
         } else {
             // ✅ Fixed: The 'else' now correctly belongs to the 'if (res.ok...)'
+            
             throw new Error(data.error || "Deployment failed");
         }
     } catch (err) {

@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast'; // ✅ Added 'toast' for the logic
 import React, { useEffect } from 'react'; // ✅ Added 'useEffect'
 import { initSocket } from './socket'; // ✅ Added socket import
-
+import GithubCallback from './pages/GithubCallback'; // Fix path if needed
 import Home from './pages/Home';
 import EditorPage from './pages/EditorPage';
 import ProfilePage from './pages/ProfilePage';
@@ -129,6 +129,7 @@ function App() {
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/library" element={<LibraryPage />} />
                     <Route path="/library/edit/:id" element={<EditLibraryItem />} />
+                    <Route path="/github/callback" element={<GithubCallback />} />
                     <Route
                         path="/editor/:roomId"
                         element={<EditorPage />}

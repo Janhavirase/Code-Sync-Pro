@@ -108,7 +108,6 @@ const [isOffline, setIsOffline] = useState(false);
             toast.success("Back online! Syncing...", { id: 'network-status', duration: 3000 });
         };
 
-        // Listen to the computer's actual network adapter
         window.addEventListener('offline', handleOffline);
         window.addEventListener('online', handleOnline);
 
@@ -117,6 +116,8 @@ const [isOffline, setIsOffline] = useState(false);
             window.removeEventListener('online', handleOnline);
         };
     }, []);
+    
+    // 🖥️ LIVE PREVIEW GENERATOR
     useEffect(() => {
         const timeout = setTimeout(() => {
             const htmlFile = files.find(f => f.name === 'index.html') || files.find(f => f.name.endsWith('.html'));
@@ -131,6 +132,61 @@ const [isOffline, setIsOffline] = useState(false);
 
     useEffect(() => { isTimeTravelActiveRef.current = isTimeTravelActive; }, [isTimeTravelActive]);
 
+    // ==========================================
+    // ✨ THE HYBRID SYNC SYSTEM (PEERS + SUITCASE)
+    // ==========================================
+    const filesRef = useRef(files);
+    const commentsRef = useRef(comments);
+    useEffect(() => { filesRef.current = files; }, [files]);
+    useEffect(() => { commentsRef.current = comments; }, [comments]);
+
+    useEffect(() => {
+        const socket = socketRef.current;
+        if (!socket || !isSocketConnected) return; 
+
+        // SCENARIO A: Server asks me to send my code to a late joiner
+        const handleRequestSync = ({ targetSocketId }) => {
+            console.log("📤 [SYNC] Sending my live files & comments to new user!");
+            socket.emit(ACTIONS.SYNC_CODE, { 
+                socketId: targetSocketId, 
+                files: filesRef.current,
+                comments: commentsRef.current
+            });
+        };
+
+        // SCENARIO B: I am the late joiner / GitHub returnee
+        const handleReceiveSync = ({ files: peerFiles, comments: peerComments }) => {
+            console.log("📥 [SYNC] Received live files from a peer!");
+            if (peerFiles && peerFiles.length > 0) setFiles(peerFiles);
+            if (peerComments && Array.isArray(peerComments)) setComments(peerComments);
+            localStorage.removeItem('editor_backup'); // Trash the suitcase, we have live code
+        };
+
+        // SCENARIO C: I returned from GitHub, but I am totally alone.
+        const handleNoPeers = () => {
+            const backup = localStorage.getItem('editor_backup');
+            if (backup) {
+                console.log("🎒 [SYNC] No peers found. Unpacking local backup suitcase!");
+                try {
+                    setFiles(JSON.parse(backup));
+                } catch (err) {
+                    console.error("Failed to parse backup:", err);
+                }
+                localStorage.removeItem('editor_backup'); 
+            }
+        };
+
+        socket.on('request-sync', handleRequestSync);
+        socket.on(ACTIONS.SYNC_CODE, handleReceiveSync);
+        socket.on('no-peers-found', handleNoPeers);
+
+        return () => {
+            socket.off('request-sync', handleRequestSync);
+            socket.off(ACTIONS.SYNC_CODE, handleReceiveSync);
+            socket.off('no-peers-found', handleNoPeers);
+        };
+    }, [isSocketConnected]); 
+
     // ---------------------------------------------------------
     // 🛡️ ENHANCED SOCKET INITIALIZATION
     // ---------------------------------------------------------
@@ -144,12 +200,12 @@ const [isOffline, setIsOffline] = useState(false);
             socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
                 if (username !== user?.username) {
                     toast.success(`${username} joined.`);
-                    socketRef.current.emit(ACTIONS.SYNC_CODE, { files,comments, socketId });
+                    // ❌ DELETED the automatic SYNC_CODE emit from here.
                 }
                 setClients(clients);
             });
 
-            // 1. Invitation Listener (Receiver Side)
+            // --- Video Call Listeners ---
             socketRef.current.on('server:invite-call', ({ from, callerId }) => {
                 toast((t) => (
                     <div className="flex flex-col gap-2 p-1">
@@ -173,17 +229,8 @@ const [isOffline, setIsOffline] = useState(false);
                 ), { duration: 15000, position: 'top-center', style: { background: '#1e1e1e', color: '#fff', border: '1px solid #333'} });
             });
 
-            // 2. Prepare Stream
-            socketRef.current.on('server:prepare-local-stream', () => {
-                startCall(); 
-            });
-
-            // 3. Call Accepted Handshake (Both Sides)
-            socketRef.current.on('server:call-accepted', () => {
-                console.log("✅ Call Accepted! Initiating simple-peer handshake...");
-                // Both peers must emit this to scan the room and create peer connections
-                socketRef.current.emit('request-call-join', { roomId });
-            });
+            socketRef.current.on('server:prepare-local-stream', () => startCall());
+            socketRef.current.on('server:call-accepted', () => socketRef.current.emit('request-call-join', { roomId }));
 
             // --- Standard Editor Listeners ---
             socketRef.current.on(ACTIONS.FILE_CREATED, ({ files: remoteFiles }) => {
@@ -204,75 +251,52 @@ const [isOffline, setIsOffline] = useState(false);
                     codeRef.current = updatedFiles[0].value;
                 }
             });
-// Listen for teammates navigating the file tree
-socketRef.current.on('user:active_file', ({ username, fileName }) => {
-    setClients(prevClients => 
-        prevClients.map(c => 
-            c.username === username ? { ...c, activeFile: fileName } : c
-        )
-    );
-});
-         socketRef.current.on(ACTIONS.SYNC_CODE, ({ files: syncedFiles, comments: syncedComments }) => {
-    // 1. Update the files/code
-    if (syncedFiles && syncedFiles.length > 0) {
-        setFiles(syncedFiles);
-    }
-    
-    // 2. Update the comments (Now syncedComments is defined!)
-    if (syncedComments && Array.isArray(syncedComments)) {
-        setComments(syncedComments); 
-    }
-});
-            
+
+            socketRef.current.on('user:active_file', ({ username, fileName }) => {
+                setClients(prevClients => 
+                    prevClients.map(c => c.username === username ? { ...c, activeFile: fileName } : c)
+                );
+            });
+
+            // ❌ DELETED the duplicate SYNC_CODE listener that was sitting here
+
             // 💬 Listen for incoming comments
-           socketRef.current.on('comment:new', ({ comment }) => {
-    // ✅ GOOD: Always appends to the latest version of the array
-    setComments((prevComments) => [...prevComments, comment]);
+            socketRef.current.on('comment:new', ({ comment }) => {
+                setComments((prevComments) => [...prevComments, comment]);
                 toast("New comment added");
             });
 
             socketRef.current.on(ACTIONS.DISCONNECTED, ({ socketId, username }) => {
                 toast.success(`${username} left.`);
                 setClients(prev => prev.filter(c => c.socketId !== socketId));
-                // Cleanup peer
                 const peerObj = peersRef.current.find(p => p.peerID === socketId);
                 if(peerObj) peerObj.peer.destroy();
                 peersRef.current = peersRef.current.filter(p => p.peerID !== socketId);
             });
-            // 🛑 CATCH THE DISCONNECT (Paste here!)
+
+            // 🛑 CATCH THE DISCONNECT
             socketRef.current.on('disconnect', (reason) => {
                 console.warn(`[NETWORK] Disconnected: ${reason}`);
-                setIsOffline(true); // Triggers the red banner
-                toast.error("WiFi dropped. Reconnecting...", { 
-                    id: 'network-status', 
-                    duration: Infinity,   
-                    icon: '📡'
-                });
+                setIsOffline(true);
+                toast.error("WiFi dropped. Reconnecting...", { id: 'network-status', duration: Infinity, icon: '📡' });
             });
 
             // 🟢 CATCH THE RECONNECT
             socketRef.current.io.on('reconnect', (attempt) => {
                 console.log(`[NETWORK] Reconnected after ${attempt} attempts`);
-                setIsOffline(false); // Hides the red banner
-                toast.success("Back online! Syncing files...", { 
-                    id: 'network-status', 
-                    duration: 3000 
-                });
-
-                // Re-sync the state
-                socketRef.current.emit(ACTIONS.JOIN, { 
-                    roomId, 
-                    username: user?.username 
-                });
+                setIsOffline(false);
+                toast.success("Back online! Syncing files...", { id: 'network-status', duration: 3000 });
+                socketRef.current.emit(ACTIONS.JOIN, { roomId, username: user?.username });
             });
         };
 
         if(roomId) init();
+        
         return () => {
             if(socketRef.current) socketRef.current.disconnect();
             if(stream) stream.getTracks().forEach(track => track.stop());
         };
-    }, [roomId]); 
+    }, [roomId]);
 
     // --- 5. HANDLERS ---
     
@@ -421,7 +445,27 @@ const handleUpdatePassword = async (currentPassword, newPassword) => {
     const copyRoomId = async () => {
         try { await navigator.clipboard.writeText(roomId); toast.success('Room ID copied'); } catch (err) { toast.error('Failed'); }
     };
+    // Add this new Bouncer function
+const handleDeployClick = () => {
+    const token = localStorage.getItem('github_token');
     
+    if (!token) {
+        // ✨ 1. THE MAGIC BREADCRUMB: Saves exactly what room you are in
+        localStorage.setItem('returnPath', window.location.pathname);
+        
+        // 🧳 2. THE SUITCASE: Backup the files for solo-developers!
+        // (Make sure your 'files' state variable is accessible in this scope)
+        localStorage.setItem('editor_backup', JSON.stringify(files)); 
+        
+        // 3. Redirect to GitHub login!
+        const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+        const githubUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&scope=repo`;
+        window.location.href = githubUrl;
+    } else {
+        // 4. If they DO have a token, open your beautiful modal!
+        setIsDeployModalOpen(true);
+    }
+};
     const downloadZip = async () => {
         const zip = new JSZip();
         files.forEach(f => zip.file(f.name, f.value));
@@ -708,8 +752,13 @@ const handleUpdatePassword = async (currentPassword, newPassword) => {
                             <Save size={14} /> Save
                         </button>
                         
-                        <button onClick={() => setIsDeployModalOpen(true)} className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95">Deploy</button>
-                        <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
+{/* Replace your old button with this one */}
+<button 
+    onClick={handleDeployClick} 
+    className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95"
+>
+    Github
+</button>                        <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
                         <button onClick={handleInvite} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{inviteCopied ? <Check size={14} /> : <UserPlus size={14} />} {inviteCopied ? 'Copied' : 'Invite'}</button>
                         <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600">📥 Download</button>
                         <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isCompiling ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isCompiling}>{isCompiling ? 'Running...' : '▶ Run'}</button>
@@ -819,13 +868,18 @@ const handleUpdatePassword = async (currentPassword, newPassword) => {
     onLogout={handleLogout}                 // 👈 Add the logout handler
 />  
 
-   {isDeployModalOpen && (
-                <DeployModal 
-                    isOpen={isDeployModalOpen} 
-                    onClose={() => setIsDeployModalOpen(false)} 
-                    files={files} 
-                />
-            )}
+ {isDeployModalOpen && (
+    <DeployModal 
+        isOpen={isDeployModalOpen} 
+        onClose={() => setIsDeployModalOpen(false)} 
+        files={files} 
+        // 👇 Add this so the modal doesn't crash looking for project details
+        project={{ 
+            title: "My CodeSync Project", 
+            roomId: roomId // (Make sure you pass your roomId here!)
+        }} 
+    />
+)}
 
             {isShareModalOpen && (
                 <ShareSnippetModal 

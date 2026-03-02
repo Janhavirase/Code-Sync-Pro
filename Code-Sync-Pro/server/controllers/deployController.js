@@ -1,150 +1,134 @@
 const axios = require('axios');
 const Project = require('../models/Project');
 
-// ✅ HELPER: Check if a file exists on GitHub to get its SHA (Prevents 422 Error)
+// ✅ HELPER: Check if a file exists on GitHub to get its SHA (prevents 422 errors)
 const getShaIfExists = async (owner, repo, path, token) => {
     try {
         const res = await axios.get(
             `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
-            { headers: { Authorization: `token ${token}` } }
+            { headers: { Authorization: `Bearer ${token}` } }
         );
-        return res.data.sha; // Return existing file's SHA
+        return res.data.sha;
     } catch (err) {
-        return null; // File doesn't exist yet
+        return null;
     }
 };
 
 exports.deployToGitHub = async (req, res) => {
-    const { title, desc, code, language, isPrivate, roomId } = req.body; 
-    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+    const { title, desc, isPrivate, roomId, files } = req.body;
+    const authHeader = req.headers.authorization;
+    const GITHUB_TOKEN = authHeader?.split(' ')[1];
 
     if (!GITHUB_TOKEN) {
-        return res.status(500).json({ 
-            success: false, 
-            error: "GITHUB_TOKEN is not defined in server .env" 
-        });
+        // ✨ NEW: Save exactly where they are right now (e.g., "/editor/29bdfe96-...")
+        localStorage.setItem('returnPath', window.location.pathname);
+        return res.status(401).json({ success: false, error: "Missing GitHub Token" });
     }
 
     try {
         const repoName = title.replace(/\s+/g, '-').toLowerCase();
-
-        // --- Step 1: Create Repository (or find existing) ---
         let owner;
         let repoUrl;
 
+        // --- STEP 1: Create or Identify Repository ---
         try {
             const createRepoRes = await axios.post(
                 'https://api.github.com/user/repos',
-                {
-                    name: repoName,
-                    description: desc || "Shipped via CodeSync Pro 🚀",
-                    private: isPrivate,
-                    auto_init: false 
-                },
-                { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
+                { name: repoName, description: desc, private: isPrivate, auto_init: true },
+                { headers: { Authorization: `Bearer ${GITHUB_TOKEN}` } }
             );
             owner = createRepoRes.data.owner.login;
             repoUrl = createRepoRes.data.html_url;
+            console.log(`✅ Repository Ready: ${repoUrl}`);
         } catch (err) {
-            // If repo exists (422), we fetch the user login to continue updates
-            if (err.response && err.response.status === 422) {
+            if (err.response?.status === 422) {
                 const userRes = await axios.get('https://api.github.com/user', {
-                    headers: { Authorization: `token ${GITHUB_TOKEN}` }
+                    headers: { Authorization: `Bearer ${GITHUB_TOKEN}` }
                 });
                 owner = userRes.data.login;
                 repoUrl = `https://github.com/${owner}/${repoName}`;
-            } else {
-                throw err;
-            }
+                console.log("ℹ️ Using existing repository.");
+            } else throw err;
         }
 
-        // --- Step 2: Generate README.md ---
+        // --- STEP 2: Generate & Push README.md ---
+        const displayLang = files && files.length > 0 ? files[0].language : "javascript";
         const readmeContent = `
 # ${title}
-
 ${desc || "A collaborative project created and shipped using CodeSync Pro."}
 
 ## 🚀 Project Details
-- **Language:** ${language.toUpperCase()}
-- **Environment:** CodeSync Cloud
+- **Primary Language:** ${displayLang.toUpperCase()}
 - **Status:** Deployed 🚢
 
-## 🛠️ Getting Started
-Find the main logic in the \`${language === 'python' ? 'main.py' : language === 'cpp' ? 'main.cpp' : 'index.js'}\` file.
-
 ---
-*Created with ❤️ by CodeSync Pro*
-        `.trim();
+*Created with ❤️ by CodeSync Pro*`.trim();
 
         const readmeSha = await getShaIfExists(owner, repoName, 'README.md', GITHUB_TOKEN);
-
         await axios.put(
             `https://api.github.com/repos/${owner}/${repoName}/contents/README.md`,
             {
                 message: "docs: update README.md 📝",
                 content: Buffer.from(readmeContent).toString('base64'),
-                sha: readmeSha 
+                sha: readmeSha
             },
-            { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
+            { headers: { Authorization: `Bearer ${GITHUB_TOKEN}` } }
         );
 
-        // --- Step 3: Push Main Source Code ---
-        const fileName = language === 'python' ? 'main.py' : 
-                         language === 'cpp' ? 'main.cpp' : 'index.js';
-        
-        const fileContent = Buffer.from(code).toString('base64');
-        const codeSha = await getShaIfExists(owner, repoName, fileName, GITHUB_TOKEN);
+        // --- STEP 3: Push All Project Files ---
+        if (files && Array.isArray(files)) {
+            for (const file of files) {
+                // We only push items that have a value (skips empty folders)
+                if (file.value !== null && file.value !== undefined) {
+                    const fileSha = await getShaIfExists(owner, repoName, file.name, GITHUB_TOKEN);
+                    await axios.put(
+                        `https://api.github.com/repos/${owner}/${repoName}/contents/${file.name}`,
+                        {
+                            message: `feat: sync ${file.name} 🚀`,
+                            content: Buffer.from(file.value).toString('base64'),
+                            sha: fileSha
+                        },
+                        { headers: { Authorization: `Bearer ${GITHUB_TOKEN}` } }
+                    );
+                    console.log(`   📄 Pushed: ${file.name}`);
+                }
+            }
+        }
 
-        await axios.put(
-            `https://api.github.com/repos/${owner}/${repoName}/contents/${fileName}`,
-            {
-                message: "feat: update source code 🚀",
-                content: fileContent,
-                sha: codeSha 
-            },
-            { headers: { Authorization: `token ${GITHUB_TOKEN}` } }
-        );
-
-        // --- Step 4: Update MongoDB (DEBUG VERSION) ---
+        // --- STEP 4: Sync to MongoDB ---
         if (roomId) {
             console.log("-----------------------------------------");
-            console.log("🔍 DEBUG: Deployment Success, now syncing to DB...");
-            console.log("📌 Target RoomID:", roomId);
-            console.log("🔗 GitHub URL to save:", repoUrl);
-
+            console.log("🔍 DB DEBUG: Searching for RoomID:", roomId);
             try {
+                // Fetch samples to diagnose potential ID mismatches
+                const samples = await Project.find({}).limit(5).select('roomId');
+                console.log("📋 Current IDs in DB:", samples.map(p => p.roomId));
+
                 const updatedProject = await Project.findOneAndUpdate(
-                    { roomId: roomId },
+                    { roomId: roomId.trim() },
                     { githubUrl: repoUrl },
-                    { new: true, runValidators: true } 
+                    { new: true, runValidators: true }
                 );
 
                 if (updatedProject) {
-                    console.log("✅ DATABASE SUCCESS: Project updated!");
-                    console.log("💾 Saved githubUrl:", updatedProject.githubUrl);
+                    console.log("✅ DB SUCCESS: Project record updated.");
                 } else {
-                    console.error("❌ DATABASE ERROR: No project found with this RoomID in the DB.");
-                    console.log("💡 Tip: Ensure the project exists in MongoDB before deploying.");
+                    console.warn("❌ DB ERROR: RoomID not found. Check if project was saved on creation.");
                 }
             } catch (dbErr) {
                 console.error("❌ MONGOOSE ERROR:", dbErr.message);
             }
             console.log("-----------------------------------------");
-        } else {
-            console.error("⚠️ CRITICAL: No RoomID received in req.body. Update skipped.");
         }
 
-        // Send Final Success Response to Frontend
-        res.status(200).json({
-            success: true,
-            repoUrl: repoUrl
-        });
+        // Success Response
+        res.status(200).json({ success: true, repoUrl });
 
     } catch (err) {
-        console.error("❌ GLOBAL CATCH ERROR:", err.response?.data || err.message);
-        res.status(500).json({ 
-            success: false, 
-            error: err.response?.data?.message || "Deployment failed" 
+        console.error("❌ GLOBAL ERROR:", err.response?.data || err.message);
+        res.status(500).json({
+            success: false,
+            error: err.response?.data?.message || "Deployment failed"
         });
     }
 };

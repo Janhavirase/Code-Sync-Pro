@@ -123,39 +123,71 @@ app.post('/api/execute', (req, res) => {
         res.json({ output: stdout });
     });
 });
+app.post('/api/github/get-token', async (req, res) => {
+    const { code } = req.body;
+
+    if (!code) {
+        return res.status(400).json({ error: "No code provided" });
+    }
+
+    try {
+        // Trade the code and your secret for the Access Token
+        const response = await axios.post('https://github.com/login/oauth/access_token', {
+            client_id: process.env.GITHUB_CLIENT_ID,
+            client_secret: process.env.GITHUB_CLIENT_SECRET,
+            code: code
+        }, {
+            headers: { 
+                // This tells GitHub to reply with clean JSON
+                accept: 'application/json' 
+            }
+        });
+
+        const accessToken = response.data.access_token;
+
+        if (!accessToken) {
+            return res.status(400).json({ error: "Failed to fetch token from GitHub" });
+        }
+
+        // Send the token back to the React frontend
+        res.json({ access_token: accessToken });
+
+    } catch (error) {
+        console.error("GitHub Token Error:", error);
+        res.status(500).json({ error: "Internal Server Error during GitHub handshake" });
+    }
+});
 io.on('connection', (socket) => {
-    // 🚨 THE WIRETAP: Catch EVERYTHING coming from the frontend
+    // 🚨 THE WIRETAP
     socket.onAny((eventName, ...args) => {
-        console.log(`[WIRETAP] 📡 Caught event from frontend: "${eventName}"`);
+        console.log(`[WIRETAP] 📡 Caught event: "${eventName}"`);
     });
-    // 1. JOIN (Updated to Save Collaborators)
+
+    // 1. JOIN
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;
         
         userSocketMap[socket.id] = username;
         socket.join(roomId);
 
-        // ✅ NEW: Save this user as a collaborator in MongoDB
-       try {
+        // ✅ Save collaborator in MongoDB
+        try {
             const project = await Project.findOne({ roomId });
-            
             if (project) {
-                if (!project.collaborators) {
-                    project.collaborators = [];
-                }
-
-                // Add user if not already in list
+                if (!project.collaborators) project.collaborators = [];
                 if (!project.collaborators.includes(username)) {
                     project.collaborators.push(username);
                     await project.save();
-                    console.log(`✅ Recorded ${username} as a collaborator!`);
                 }
             }
         } catch (err) {
             console.error("Error saving collaborator:", err);
         }
 
+        // Get all clients in the room
         const clients = getAllConnectedClients(roomId);
+        
+        // Notify everyone that a new user joined
         clients.forEach(({ socketId }) => {
             io.to(socketId).emit(ACTIONS.JOINED, {
                 clients,
@@ -163,16 +195,35 @@ io.on('connection', (socket) => {
                 socketId: socket.id,
             });
         });
+
+        // ✨ THE NEW PEER SYNC LOGIC
+        if (clients.length > 1) {
+            // Pick ONE existing person in the room (who isn't the new guy)
+            const existingClient = clients.find(c => c.socketId !== socket.id);
+            if (existingClient) {
+                console.log(`[SERVER] Asking ${existingClient.username} to send code to ${username}`);
+                // Ask them to sync their code to the new socket
+                io.to(existingClient.socketId).emit('request-sync', { 
+                    targetSocketId: socket.id 
+                });
+            }
+        } else {
+            // The user is entirely alone. Tell them to unpack their suitcase!
+            console.log(`[SERVER] ${username} is alone. Emitting no-peers-found.`);
+            io.to(socket.id).emit('no-peers-found');
+        }
     });
 
-    // 2. CODE SYNC
+    // 2. CODE SYNC (Your existing code handles this perfectly!)
     socket.on(ACTIONS.CODE_CHANGE, ({ roomId, fileName, code }) => {
         socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { fileName, code });
     });
 
+    // This forwards the files from the existing peer to the new joiner
     socket.on(ACTIONS.SYNC_CODE, ({ socketId, files }) => {
         io.to(socketId).emit(ACTIONS.SYNC_CODE, { files });
     });
+
 // Inside io.on('connection', (socket) => { ... })
 
 // 1. User A invites the room
