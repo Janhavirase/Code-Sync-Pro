@@ -4,6 +4,7 @@ import MonacoEditor from '@monaco-editor/react';
 const Editor = ({ 
     onCodeChange, 
     code, 
+    activeFileName,
     jumpToLine,
     theme = 'vs-dark', 
     language = 'javascript', 
@@ -11,12 +12,19 @@ const Editor = ({
     fontSize = 16,
     fontFamily = 'monospace',
     wordWrap = false,
-    comments 
+    comments,
+    // ✨ NEW PROPS FOR MULTIPLAYER CURSORS:
+    socket,
+    roomId,
+    username
 }) => {
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
-    const decorationsRef = useRef([]);
+    
+    // Separate refs so comments and cursors don't overwrite each other
+    const commentDecorationsRef = useRef([]);
+    const cursorDecorationsRef = useRef({}); 
 
     // 1. Handle Editor Mounting
     function handleEditorDidMount(editor, monaco) {
@@ -30,11 +38,21 @@ const Editor = ({
             onCodeChange(currentCode); 
         });
 
-        // Track cursor for line selection
-        editor.onDidChangeCursorPosition((e) => {
+        // Track cursor for line selection AND multiplayer broadcasting
+       editor.onDidChangeCursorPosition((e) => {
             if (onLineSelect) onLineSelect(e.position.lineNumber, false);
+            
+            if (socket && roomId && username) {
+                socket.emit('cursor-change', {
+                    roomId,
+                    socketId: socket.id,
+                    username: username,
+                    fileName: activeFileName, // ✨ SEND THE FILE NAME
+                    position: e.position,
+                    color: '#ffaa00'
+                });
+            }
         });
-
         // Add Right-Click "Add Comment" Action
         editor.addAction({
             id: 'add-comment-action',
@@ -49,6 +67,62 @@ const Editor = ({
         });
     }
 
+    // ==========================================
+    // ✨ RECEIVE MULTIPLAYER CURSORS
+    // ==========================================
+   // ==========================================
+    // ✨ RECEIVE MULTIPLAYER CURSORS
+    // ==========================================
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleRemoteCursor = ({ socketId, username: remoteUser, fileName: remoteFileName, position, color }) => {
+            if (!editorRef.current || !monacoRef.current) return;
+
+            const monaco = monacoRef.current;
+            const editor = editorRef.current;
+
+            // ✨ THE FIX: If my friend is on a different file, HIDE their cursor!
+            if (remoteFileName !== activeFileName) {
+                // If they just switched away, erase their old cursor from my screen
+                if (cursorDecorationsRef.current[socketId]) {
+                    editor.deltaDecorations([cursorDecorationsRef.current[socketId]], []);
+                    delete cursorDecorationsRef.current[socketId];
+                }
+                return; // Stop drawing!
+            }
+
+            // Draw the cursor because we are on the exact same file
+            const newCursorDecoration = {
+                range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                options: {
+                    className: 'remote-cursor', 
+                    hoverMessage: { value: `**${remoteUser}**` },
+                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+                }
+            };
+
+            const oldDecorationId = cursorDecorationsRef.current[socketId] ? [cursorDecorationsRef.current[socketId]] : [];
+            const newDecorationIds = editor.deltaDecorations(oldDecorationId, [newCursorDecoration]);
+            cursorDecorationsRef.current[socketId] = newDecorationIds[0];
+        };
+
+        const handleUserLeft = ({ socketId }) => {
+            if (editorRef.current && cursorDecorationsRef.current[socketId]) {
+                editorRef.current.deltaDecorations([cursorDecorationsRef.current[socketId]], []);
+                delete cursorDecorationsRef.current[socketId];
+            }
+        };
+
+        socket.on('cursor-change', handleRemoteCursor);
+        socket.on('disconnected', handleUserLeft);
+
+        return () => {
+            socket.off('cursor-change', handleRemoteCursor);
+            socket.off('disconnected', handleUserLeft);
+        };
+    }, [socket, activeFileName]); // ✨ ADD activeFileName TO DEPENDENCY ARRAY!
+
     // ✅ JUMP TO LINE LOGIC
     useEffect(() => {
         if (editorRef.current && jumpToLine) {
@@ -59,7 +133,7 @@ const Editor = ({
         }
     }, [jumpToLine]);
 
-    // ✅ APPLY COMMENT HIGHLIGHTS (WITH SAFETY & STICKINESS)
+    // ✅ APPLY COMMENT HIGHLIGHTS
     useEffect(() => {
         if (editorRef.current && monacoRef.current && Array.isArray(comments)) {
             const newDecorations = comments
@@ -74,13 +148,13 @@ const Editor = ({
                             className: 'monaco-comment-highlight', 
                             glyphMarginClassName: 'monaco-comment-glyph',
                             hoverMessage: { value: `**${comment.username || 'User'}**: ${comment.text || 'No text'}` },
-                            stickiness: 1 // NeverGrowsWhenTypingAtEdges
+                            stickiness: 1 
                         }
                     };
                 });
 
-            decorationsRef.current = editorRef.current.deltaDecorations(
-                decorationsRef.current, 
+            commentDecorationsRef.current = editorRef.current.deltaDecorations(
+                commentDecorationsRef.current, 
                 newDecorations          
             );
         }

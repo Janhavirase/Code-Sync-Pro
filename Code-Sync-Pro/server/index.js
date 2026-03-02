@@ -162,7 +162,11 @@ io.on('connection', (socket) => {
     socket.onAny((eventName, ...args) => {
         console.log(`[WIRETAP] 📡 Caught event: "${eventName}"`);
     });
-
+// 🖱️ MULTIPLAYER CURSORS
+    socket.on('cursor-change', (payload) => {
+        // payload now contains fileName, position, username, etc.
+        socket.in(payload.roomId).emit('cursor-change', payload);
+    });
     // 1. JOIN
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;

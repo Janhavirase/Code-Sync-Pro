@@ -118,17 +118,56 @@ const [isOffline, setIsOffline] = useState(false);
     }, []);
     
     // 🖥️ LIVE PREVIEW GENERATOR
+    // 🖥️ SMART BROWSER-ENGINE PREVIEW
     useEffect(() => {
         const timeout = setTimeout(() => {
-            const htmlFile = files.find(f => f.name === 'index.html') || files.find(f => f.name.endsWith('.html'));
-            const cssFile = files.find(f => f.name === 'style.css');
-            const jsFile = files.find(f => f.name === 'script.js');
+            // 1. Find the active HTML file, or default to index.html
+            let htmlFile = null;
+            if (activeFileName && activeFileName.endsWith('.html')) {
+                htmlFile = files.find(f => f.name === activeFileName);
+            }
+            if (!htmlFile) {
+                htmlFile = files.find(f => f.name === 'index.html') || files.find(f => f.name.endsWith('.html'));
+            }
+
             if (htmlFile) {
-                setSrcDoc(`<!DOCTYPE html><html><head><style>${cssFile?.value || ''}</style></head><body>${htmlFile.value}<script>${jsFile?.value || ''}</script></body></html>`);
+                let parsedHtml = htmlFile.value;
+
+                // 2. 🎨 DYNAMIC CSS INJECTION
+                // Scans for: <link rel="stylesheet" href="filename.css">
+                parsedHtml = parsedHtml.replace(/<link\s+[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (match, cssFilename) => {
+                    // Find the exact CSS file the user asked for
+                    const linkedCssFile = files.find(f => f.name === cssFilename);
+                    if (linkedCssFile) {
+                        return `<style>${linkedCssFile.value}</style>`;
+                    }
+                    return match; // Leave alone if file doesn't exist yet
+                });
+
+                // 3. ⚙️ DYNAMIC JS INJECTION
+                // Scans for: <script src="filename.js"></script>
+                parsedHtml = parsedHtml.replace(/<script\s+[^>]*src=["']([^"']+\.js)["'][^>]*><\/script>/gi, (match, jsFilename) => {
+                    // Find the exact JS file the user asked for
+                    const linkedJsFile = files.find(f => f.name === jsFilename);
+                    if (linkedJsFile) {
+                        return `<script>${linkedJsFile.value}</script>`;
+                    }
+                    return match; // Leave alone if file doesn't exist yet
+                });
+
+                // Render the fully stitched-together page
+                setSrcDoc(parsedHtml);
+            } else {
+                setSrcDoc(`
+                    <div style="color: #888; font-family: sans-serif; text-align: center; margin-top: 50px;">
+                        <p>No HTML file found to preview.</p>
+                    </div>
+                `);
             }
         }, 500); 
+
         return () => clearTimeout(timeout);
-    }, [files]);
+    }, [files, activeFileName]);
 
     useEffect(() => { isTimeTravelActiveRef.current = isTimeTravelActive; }, [isTimeTravelActive]);
 
@@ -780,6 +819,9 @@ const handleDeployClick = () => {
                                 // 💬 RESTORED: Active Line for Comments
                                 onLineSelect={(line, forceOpen) => { setActiveLine(line); if (forceOpen) setActiveSidebarTab('comments'); }}
                                 comments={comments} 
+                                socket={socketRef.current} 
+                                activeFileName={activeFileName}
+    username={user?.username || "Anonymous"}
                                 theme={editorTheme} fontSize={editorFontSize} fontFamily={editorFontFamily} wordWrap={editorWordWrap}
                             />
                         </div>
