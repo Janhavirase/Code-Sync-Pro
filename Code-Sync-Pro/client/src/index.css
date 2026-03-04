@@ -67,4 +67,21 @@ html, body, #root {
 .comment-line-highlight {
     background: rgba(74, 222, 128, 0.1); /* Subtle green background for the whole line */
 }
-/**/
+
+/* Locks the video box so DOM layout shifts stop shaking the screen */
+.locked-video-container {
+    width: 100%;
+    height: 100%;
+    max-height: 100vh; /* Prevents it from pushing the page down */
+    
+    /* Lock the box to a standard monitor shape */
+    aspect-ratio: 16 / 9; 
+    
+    /* If WebRTC drops the resolution, this forces the video to stay centered 
+       inside the box rather than stretching or shrinking the box itself */
+    object-fit: contain; 
+    
+    /* Black background hides the edges if the video shape changes */
+    background-color: #000; 
+    border-radius: 8px; /* Optional: Makes it look clean */
+}

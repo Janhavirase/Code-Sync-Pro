@@ -1,16 +1,22 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react'; // ✨ Added useEffect
 import toast from 'react-hot-toast';
 import { SelfieSegmentation } from '@mediapipe/selfie_segmentation';
 
-export const useVideoCall = (socketRef, roomId, peersRef) => {
+// ✨ ADDED username as the 4th parameter
+export const useVideoCall = (socketRef, roomId, peersRef, username) => {
     const [stream, setStream] = useState(null);
     const [isCallActive, setIsCallActive] = useState(false);
-    const [isScreenSharing, setIsScreenSharing] = useState(false);
+   
+    
+   
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [isBlurred, setIsBlurred] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
-
+ const [isScreenSharing, setIsScreenSharing] = useState(false);
+  // ✨ NEW: State to track WHO is currently sharing their screen
+    const [activeScreenSharer, setActiveScreenSharer] = useState(null); 
+    
     // Refs for processing and hardware management
     const canvasRef = useRef(document.createElement("canvas"));
     const videoElementRef = useRef(document.createElement("video"));
@@ -19,6 +25,46 @@ export const useVideoCall = (socketRef, roomId, peersRef) => {
     const originalStreamRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const recordedChunksRef = useRef([]);
+
+    // ==========================================
+    // ✨ NEW: SCREEN SHARE SOCKET LISTENERS
+    // ==========================================
+    useEffect(() => {
+        if (!socketRef.current) return;
+        const socket = socketRef.current;
+const handleShareStarted = (sharerName) => {
+            // ✨ ADD THIS LINE so we know if the browser actually hears the server!
+            console.log("🚨 [FRONTEND] Lock received from server! Sharer is:", sharerName); 
+            
+            setActiveScreenSharer(sharerName);
+            if (sharerName !== username) {
+                toast(`${sharerName} started sharing their screen`, { icon: '📺' });
+            }
+        };
+
+        const handleShareStopped = () => {
+            // ✨ ADD THIS LINE
+            console.log("🔓 [FRONTEND] Unlock received from server!"); 
+            setActiveScreenSharer(null);
+        };
+
+        const handleUserDisconnected = ({ username: disconnectedUser }) => {
+            // If the person who disconnected was sharing, unlock the screen!
+            setActiveScreenSharer((prev) => prev === disconnectedUser ? null : prev);
+        };
+
+        socket.on('screen-share-started', handleShareStarted);
+        socket.on('screen-share-stopped', handleShareStopped);
+        socket.on('disconnected', handleUserDisconnected); // Adjust event name if needed
+
+        return () => {
+            socket.off('screen-share-started', handleShareStarted);
+            socket.off('screen-share-stopped', handleShareStopped);
+            socket.off('disconnected', handleUserDisconnected);
+        };
+    }, [socketRef.current, username]);
+    // ==========================================
+
 
     const startCall = async () => {
         try {
@@ -34,33 +80,28 @@ export const useVideoCall = (socketRef, roomId, peersRef) => {
     };
 
     // 🚨 THE CRITICAL HELPER: Native Track Swapping
-    // This is the "Hooks or Crooks" logic that prevents the InvalidStateError
-const swapVideoTrack = (newTrack) => {
-    if (peersRef.current && peersRef.current.length > 0) {
-        peersRef.current.forEach(({ peer }) => {
-            if (peer._pc) {
-                const senders = peer._pc.getSenders();
-                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-                
-                if (videoSender) {
-                    // 🚨 THE FIX: Set content hint before swapping
-                    // 'detail' is optimized for text/screen sharing
-                    // 'motion' is optimized for webcams
-                    newTrack.contentHint = isScreenSharing ? 'detail' : 'motion';
+    const swapVideoTrack = (newTrack) => {
+        if (peersRef.current && peersRef.current.length > 0) {
+            peersRef.current.forEach(({ peer }) => {
+                if (peer._pc) {
+                    const senders = peer._pc.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                    
+                    if (videoSender) {
+                        newTrack.contentHint = isScreenSharing ? 'detail' : 'motion';
 
-                    videoSender.replaceTrack(newTrack).then(() => {
-                        console.log("♻️ Native Sender Updated with hint:", newTrack.contentHint);
-                    }).catch(err => console.error("❌ Swap Failed:", err));
+                        videoSender.replaceTrack(newTrack).then(() => {
+                            console.log("♻️ Native Sender Updated with hint:", newTrack.contentHint);
+                        }).catch(err => console.error("❌ Swap Failed:", err));
+                    }
                 }
-            }
-        });
-    }
+            });
+        }
 
-    // Local UI update
-    const audioTrack = originalStreamRef.current?.getAudioTracks()[0];
-    const newUiStream = new MediaStream([newTrack, ...(audioTrack ? [audioTrack] : [])]);
-    setStream(newUiStream);
-};
+        const audioTrack = originalStreamRef.current?.getAudioTracks()[0];
+        const newUiStream = new MediaStream([newTrack, ...(audioTrack ? [audioTrack] : [])]);
+        setStream(newUiStream);
+    };
 
     // --- 🌫️ BACKGROUND BLUR LOGIC ---
     const initBlur = () => {
@@ -86,7 +127,7 @@ const swapVideoTrack = (newTrack) => {
         selfieSegmentationRef.current = selfieSegmentation;
     };
 
-const toggleBlur = async () => {
+    const toggleBlur = async () => {
         if (!isBlurred) {
             console.log("🌫️ Activating Background Blur...");
             if (!selfieSegmentationRef.current) initBlur();
@@ -94,7 +135,6 @@ const toggleBlur = async () => {
             const video = videoElementRef.current;
             video.srcObject = originalStreamRef.current;
             
-            // 🚨 THE FIX: Wait for the video to actually have dimensions
             await new Promise((resolve) => {
                 video.onloadedmetadata = () => {
                     video.play().then(resolve);
@@ -102,12 +142,10 @@ const toggleBlur = async () => {
             });
 
             const canvas = canvasRef.current;
-            // Use the actual video dimensions to avoid "zero size" errors
             canvas.width = video.videoWidth || 640;
             canvas.height = video.videoHeight || 480;
 
             const processVideo = async () => {
-                // 🛡️ Safety check: Ensure video is still playing and has valid data
                 if (video.paused || video.ended || video.readyState < 2) return;
                 
                 try {
@@ -133,17 +171,43 @@ const toggleBlur = async () => {
             setIsBlurred(false);
         }
     };
+
     // --- 🎬 SCREEN SHARE LOGIC ---
     const startScreenShare = async () => {
+        // ✨ THE LOCK: Check if someone else is already sharing
+        if (activeScreenSharer && activeScreenSharer !== username) {
+            toast.error(`${activeScreenSharer} is already sharing their screen!`);
+            return;
+        }
+
         try {
             console.log("🎬 Initiating NATIVE Screen Share Swap...");
-            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                video: {
+                    width: { ideal: 1920, max: 1920 },
+                    height: { ideal: 1080, max: 1080 },
+                    frameRate: { max: 15 }, 
+                    displaySurface: "monitor",
+                    resizeMode: "none"
+                } 
+            });
+            
             const screenTrack = screenStream.getVideoTracks()[0];
+
+            if ('contentHint' in screenTrack) {
+                screenTrack.contentHint = 'detail'; 
+            }
 
             swapVideoTrack(screenTrack);
             setIsScreenSharing(true);
+            
+            // ✨ BROADCAST THE LOCK: Tell the server you took control
+            setActiveScreenSharer(username);
+            if (socketRef.current) {
+                socketRef.current.emit('screen-share-started', { roomId, username });
+            }
 
-            // Temporarily disable camera light
             const oldCameraTrack = originalStreamRef.current?.getVideoTracks()[0];
             if (oldCameraTrack) setTimeout(() => oldCameraTrack.enabled = false, 500);
 
@@ -153,35 +217,37 @@ const toggleBlur = async () => {
         }
     };
 
-  const endScreenShare = async () => {
-    try {
-        console.log("🎬 Returning to Webcam...");
-        const oldCameraTrack = originalStreamRef.current?.getVideoTracks()[0];
-        
-        if (oldCameraTrack) {
-            // 1. Re-enable the hardware track
-            oldCameraTrack.enabled = true;
+    const endScreenShare = async () => {
+        try {
+            console.log("🎬 Returning to Webcam...");
+            const oldCameraTrack = originalStreamRef.current?.getVideoTracks()[0];
+            
+            if (oldCameraTrack) {
+                oldCameraTrack.enabled = true;
+                setTimeout(() => {
+                    if (oldCameraTrack.readyState === 'live') {
+                        swapVideoTrack(oldCameraTrack);
+                    }
+                }, 500); 
+            }
 
-            // 2. 🛡️ THE FIX: Wait for the track to "warm up" and produce frames
-            // This prevents the 2px width collapse
-            setTimeout(() => {
-                if (oldCameraTrack.readyState === 'live') {
-                    swapVideoTrack(oldCameraTrack);
-                }
-            }, 500); // 500ms is the sweet spot for hardware re-initialization
+            const screenTrack = stream?.getVideoTracks()[0];
+            if (screenTrack && screenTrack !== oldCameraTrack) {
+                screenTrack.stop();
+            }
+
+            setIsScreenSharing(false);
+            
+            // ✨ RELEASE THE LOCK: Tell everyone the screen is free
+            setActiveScreenSharer(null);
+            if (socketRef.current) {
+                socketRef.current.emit('screen-share-stopped', { roomId });
+            }
+
+        } catch (err) {
+            console.error("❌ Error returning to camera:", err);
         }
-
-        // 3. Clean up the screen track
-        const screenTrack = stream?.getVideoTracks()[0];
-        if (screenTrack && screenTrack !== oldCameraTrack) {
-            screenTrack.stop();
-        }
-
-        setIsScreenSharing(false);
-    } catch (err) {
-        console.error("❌ Error returning to camera:", err);
-    }
-};
+    };
 
     // --- 📊 NETWORK HEALTH LOGIC ---
     const getNetworkStats = async (peer) => {
@@ -277,6 +343,7 @@ const toggleBlur = async () => {
 
     return { 
         stream, isCallActive, isScreenSharing, isMuted, isVideoOff, isBlurred, isRecording,
+        activeScreenSharer, // ✨ EXPORT THE LOCK STATE SO THE UI CAN DISABLE THE BUTTON
         startCall, endCall, startRecording, stopRecording, getNetworkStats,
         startScreenShare, endScreenShare, toggleMic, toggleVideo, toggleBlur 
     };

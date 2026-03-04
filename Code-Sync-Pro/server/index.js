@@ -167,6 +167,16 @@ io.on('connection', (socket) => {
         // payload now contains fileName, position, username, etc.
         socket.in(payload.roomId).emit('cursor-change', payload);
     });
+   // 📺 SCREEN SHARE LOCKS
+    socket.on('screen-share-started', ({ roomId, username }) => {
+        console.log(`🔒 [LOCK] User [${username}] locked Room [${roomId}]`); // ✨ ADD THIS
+        socket.in(roomId).emit('screen-share-started', username);
+    });
+
+    socket.on('screen-share-stopped', ({ roomId }) => {
+        console.log(`🔓 [UNLOCK] Room [${roomId}] is free`); // ✨ ADD THIS
+        socket.in(roomId).emit('screen-share-stopped');
+    });
     // 1. JOIN
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;

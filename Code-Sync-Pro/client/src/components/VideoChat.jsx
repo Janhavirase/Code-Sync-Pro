@@ -54,7 +54,8 @@ const AudioVisualizer = ({ stream, onVolumeChange }) => {
 const VideoChat = ({ 
     socketRef, stream, isScreenSharing, onEndCall, peersRef, 
     onToggleMic, onToggleCamera, onToggleScreenShare,
-    isMuted, isVideoOff, clients,
+    isMuted, isVideoOff, clients,activeScreenSharer,
+    username,
     isRecording, startRecording, stopRecording, getNetworkStats, toggleBlur, isBlurred
 }) => {
     const [peers, setPeers] = useState([]);
@@ -259,8 +260,24 @@ const VideoChat = ({
                                 <Circle size={18} fill={isRecording ? "white" : "currentColor"} />
                             </button>
 
-                            <button onClick={onToggleScreenShare} className={`p-2 rounded-full transition-all ${isScreenSharing ? 'bg-blue-600 text-white' : 'bg-[#333] hover:bg-[#444]'}`}><Monitor size={18} /></button>
-                            <button onClick={onEndCall} className="p-2 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg active:scale-95 transition-transform ml-1"><PhoneOff size={18} /></button>
+<button 
+    onClick={onToggleScreenShare} 
+    disabled={activeScreenSharer && activeScreenSharer !== username}
+    title={
+        isScreenSharing ? "Stop Sharing" : 
+        (activeScreenSharer && activeScreenSharer !== username) ? `Locked by ${activeScreenSharer}` : 
+        "Share Screen"
+    }
+    className={`p-2 rounded-full transition-all ${
+        isScreenSharing 
+            ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/30' 
+            : (activeScreenSharer && activeScreenSharer !== username)
+            ? 'bg-[#1a1a1a] text-[#555] cursor-not-allowed' 
+            : 'bg-[#333] hover:bg-[#444] text-white'
+    }`}
+>
+    <Monitor size={18} />
+</button>                            <button onClick={onEndCall} className="p-2 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-lg active:scale-95 transition-transform ml-1"><PhoneOff size={18} /></button>
                         </div>
                     </div>
                 )}

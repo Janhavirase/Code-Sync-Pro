@@ -85,18 +85,18 @@ const [isOffline, setIsOffline] = useState(false);
     const [inviteCopied, setInviteCopied] = useState(false);
     const [jumpToLine, setJumpToLine] = useState(null);
     // ✅ INTEGRATE VIDEO HOOK
-    const { 
-        stream, isCallActive, isScreenSharing, isMuted, isVideoOff, 
-        startCall, endCall, startScreenShare, endScreenShare,
-        toggleMic, toggleVideo, isBlurred, isRecording,
-        toggleBlur, startRecording, stopRecording, getNetworkStats
-    } = useVideoCall(socketRef, roomId, peersRef,jumpToLine);
-
     const getSavedUser = () => { try { return JSON.parse(localStorage.getItem('userInfo')); } catch { return null; } };
     const savedUser = getSavedUser();
     const user = location.state?.user || (location.state?.username ? location.state : savedUser);
     const userId = location.state?.userId || user?.user?._id || user?._id || user?.id;
     const isHost = location.state?.isHost || !!userId;
+    const { 
+        stream, isCallActive, isScreenSharing, isMuted, isVideoOff, 
+        startCall, endCall, startScreenShare, endScreenShare,
+        toggleMic, toggleVideo, isBlurred, isRecording,activeScreenSharer,
+        toggleBlur, startRecording, stopRecording, getNetworkStats
+    } = useVideoCall(socketRef, roomId, peersRef,user?.username);
+
 // 🚨 INSTANT OFFLINE DETECTOR
     useEffect(() => {
         const handleOffline = () => {
@@ -892,6 +892,8 @@ const handleDeployClick = () => {
                     onToggleMic={toggleMic}
                     onToggleCamera={toggleVideo} 
                     onToggleScreenShare={isScreenSharing ? endScreenShare : startScreenShare}
+                    activeScreenSharer={activeScreenSharer} 
+    username={user?.username}
                 />
             )}
             
