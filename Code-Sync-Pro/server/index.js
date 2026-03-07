@@ -177,6 +177,11 @@ io.on('connection', (socket) => {
         console.log(`🔓 [UNLOCK] Room [${roomId}] is free`); // ✨ ADD THIS
         socket.in(roomId).emit('screen-share-stopped');
     });
+    // ❌ CALL REJECTED
+    socket.on('client:reject-call', ({ callerId }) => {
+        // Forward the rejection specifically to the person who started the call
+        socket.to(callerId).emit('server:call-rejected');
+    });
     // 1. JOIN
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;

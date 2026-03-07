@@ -345,6 +345,7 @@ const handleShareStarted = (sharerName) => {
         stream, isCallActive, isScreenSharing, isMuted, isVideoOff, isBlurred, isRecording,
         activeScreenSharer, // ✨ EXPORT THE LOCK STATE SO THE UI CAN DISABLE THE BUTTON
         startCall, endCall, startRecording, stopRecording, getNetworkStats,
-        startScreenShare, endScreenShare, toggleMic, toggleVideo, toggleBlur 
+        startScreenShare, endScreenShare, toggleMic, toggleVideo, toggleBlur, // You already have this
+        setActiveScreenSharer,
     };
 };

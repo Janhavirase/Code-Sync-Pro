@@ -94,7 +94,7 @@ const [isOffline, setIsOffline] = useState(false);
         stream, isCallActive, isScreenSharing, isMuted, isVideoOff, 
         startCall, endCall, startScreenShare, endScreenShare,
         toggleMic, toggleVideo, isBlurred, isRecording,activeScreenSharer,
-        toggleBlur, startRecording, stopRecording, getNetworkStats
+        toggleBlur, startRecording, stopRecording, getNetworkStats,setActiveScreenSharer
     } = useVideoCall(socketRef, roomId, peersRef,user?.username);
 
 // 🚨 INSTANT OFFLINE DETECTOR
@@ -244,7 +244,7 @@ const [isOffline, setIsOffline] = useState(false);
                 setClients(clients);
             });
 
-            // --- Video Call Listeners ---
+    // --- Video Call Listeners ---
             socketRef.current.on('server:invite-call', ({ from, callerId }) => {
                 toast((t) => (
                     <div className="flex flex-col gap-2 p-1">
@@ -261,7 +261,11 @@ const [isOffline, setIsOffline] = useState(false);
                             >Accept</button>
                             <button 
                                 className="bg-red-600 px-3 py-1 rounded text-xs font-bold hover:bg-red-500 transition-all" 
-                                onClick={() => toast.dismiss(t.id)}
+                                onClick={() => {
+                                    toast.dismiss(t.id);
+                                    // ✨ Tell the server to notify the person who called!
+                                    socketRef.current.emit('client:reject-call', { callerId });
+                                }}
                             >Reject</button>
                         </div>
                     </div>
@@ -269,8 +273,32 @@ const [isOffline, setIsOffline] = useState(false);
             });
 
             socketRef.current.on('server:prepare-local-stream', () => startCall());
-            socketRef.current.on('server:call-accepted', () => socketRef.current.emit('request-call-join', { roomId }));
+// ✨ TO THIS NEW BLOCK:
+socketRef.current.on('server:call-accepted', async () => {
+    toast.success("Call accepted! Connecting...");
+    
+    // 1. NOW we finally turn on User A's camera
+    await startCall(); 
+    
+    // 2. Then we tell WebRTC to connect the video feeds
+    socketRef.current.emit('request-call-join', { roomId });
+});
+            // ✨ PASTE THE NEW LISTENER RIGHT HERE! ✨
+            socketRef.current.on('server:call-rejected', () => {
+                console.log("🚨 [FRONTEND] I heard the rejection! Shutting down camera..."); // ✨ Add this!
+                toast.error("Call was declined", { icon: '❌' });
+                endCall(); // This shuts off User A's camera!
+            });
+// // 📺 RESTORE THE SCREEN SHARE LOCKS
+// socketRef.current.on('screen-share-started', (sharerName) => {
+//     console.log("🚨 [FRONTEND] Lock received from server! Sharer is:", sharerName); 
+//     setActiveScreenSharer(sharerName);
+// });
 
+// socketRef.current.on('screen-share-stopped', () => {
+//     console.log("🔓 [FRONTEND] Unlock received from server!"); 
+//     setActiveScreenSharer(null);
+// });
             // --- Standard Editor Listeners ---
             socketRef.current.on(ACTIONS.FILE_CREATED, ({ files: remoteFiles }) => {
                 setFiles(curr => {
@@ -339,16 +367,18 @@ const [isOffline, setIsOffline] = useState(false);
 
     // --- 5. HANDLERS ---
     
-    const handleInviteCall = () => {
-        if (socketRef.current && !isCallActive) {
-            socketRef.current.emit('client:invite-call', { 
-                roomId, 
-                username: user?.username || 'Someone' 
-            });
-            startCall(); 
-            toast.success("Call invitation sent!");
-        }
-    };
+  const handleInviteCall = () => {
+    if (socketRef.current && !isCallActive) {
+        socketRef.current.emit('client:invite-call', { 
+            roomId, 
+            username: user?.username || 'Someone' 
+        });
+        
+        // ✨ REMOVED startCall() FROM HERE!
+        // We just tell them to wait instead:
+        toast.success("Ringing... waiting for answer"); 
+    }
+};
 const handleCommentClick = (line) => {
     setJumpToLine(line);
     // Reset after a short delay so the same line can be clicked again
