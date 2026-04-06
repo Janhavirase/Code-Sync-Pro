@@ -127,14 +127,17 @@ router.get('/profile/:identifier', async (req, res) => {
 
         // 2. ✨ THE HYBRID SEARCH: Find projects by ID OR by Username
         // This ensures old "name-only" contributions still show up!
+       // 2. ✨ THE HYBRID SEARCH: Find projects by ID OR by Username
+        const cleanName = user.username.replace(/\.+$/, "");
+        
         const contributedProjects = await CommunityProject.find({
             $or: [
                 { "contributors.userId": user._id },
+                { "contributors.userId": user._id.toString() }, // 👈 THE MAGIC BULLET! THIS FIXES IT!
                 { "contributors.username": user.username },
-                { "contributors.username": { $regex: new RegExp(`^${user.username}$`, "i") } }
+                { "contributors.username": { $regex: new RegExp(`^${cleanName}$`, "i") } }
             ]
         }).sort({ createdAt: -1 });
-
         res.status(200).json({
             profile: user,
             contributions: contributedProjects 
