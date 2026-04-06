@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Project = require('../models/Project');
-
+const CommunityProject = require('../models/CommunityProject');
 // --- Helper Functions ---
 const isYesterday = (d1, d2) => {
     const oneDay = 24 * 60 * 60 * 1000;
@@ -30,11 +30,13 @@ const getColorForLang = (lang) => {
 };
 
 // --- 1. Get Profile & Calculate Stats ---
+// --- 1. Get Profile & Calculate Stats ---
 exports.getUserProfile = async (req, res) => {
     try {
-        console.log("⚡ CONTROLLER: calculating stats for", req.params.userId);
+        const { userId } = req.params;
+        console.log("⚡ CONTROLLER: Calculating full profile for", userId);
 
-        const user = await User.findById(req.params.userId);
+        const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         // --- A. STREAK LOGIC ---
@@ -50,9 +52,41 @@ exports.getUserProfile = async (req, res) => {
         }
         user.lastActiveDate = today;
 
-        // --- B. PROJECT, COLLAB, & GITHUB STATS ---
+        // --- B. FETCH ALL PROJECT TYPES ---
+        // 1. Private Projects owned by the user
         const userProjects = await Project.find({ owner: user._id }); 
         
+        // 2. Open Source Contributions (The "Trophies")
+        // We clean the username of any trailing dots before searching
+        // --- C. FETCH OPEN SOURCE CONTRIBUTIONS (Nuclear Debug Version) ---
+        console.log("\n====== 🚨 SENIOR DEBUGGER INITIATED ======");
+        console.log("1. Searching for User:", user.username, "| ID:", user._id);
+
+        // 🕵️ STEP 1: Let's see exactly what a project looks like in your DB
+        const sampleProject = await CommunityProject.findOne();
+        if (sampleProject) {
+            console.log("\n2. SCHEMA CHECK - Here is what your DB is actually saving:");
+            console.log(JSON.stringify(sampleProject.contributors, null, 2));
+        } else {
+            console.log("\n2. SCHEMA CHECK - ❌ WARNING: Your CommunityProject collection is completely EMPTY!");
+        }
+
+        // 🕵️ STEP 2: The Ultra-Forgiving Query
+        const cleanName = user.username.replace(/\.+$/, "");
+        
+        const openSourceTrophies = await CommunityProject.find({
+            $or: [
+                { "contributors.userId": user._id },               // Match Object ID
+                { "contributors.userId": user._id.toString() },    // Match String ID (Common Bug Fix)
+                { "contributors.username": user.username },        // Match Exact Name
+                { "contributors.username": { $regex: new RegExp(`^${cleanName}$`, "i") } } // Match Case-Insensitive
+            ]
+        }).sort({ createdAt: -1 });
+
+        console.log(`\n3. QUERY RESULT: Found ${openSourceTrophies.length} matches.`);
+        console.log("====== DEBUGGER COMPLETE ======\n");
+
+        // --- C. STATS & TECH STACK CALCULATION ---
         const uniqueCollaborators = new Set();
         const languageMap = {};
         const deployedProjects = [];
@@ -74,7 +108,7 @@ exports.getUserProfile = async (req, res) => {
                 p.collaborators.forEach(c => uniqueCollaborators.add(c));
             }
 
-            // Count languages for Tech Stack
+            // Calculate Language Stats
             if (p.files && Array.isArray(p.files)) {
                 p.files.forEach(file => {
                     if (file.language && file.value && file.value.length > 10) { 
@@ -86,36 +120,38 @@ exports.getUserProfile = async (req, res) => {
             }
         });
 
-        // Convert Map to Array for Frontend
+        // Convert language map to sorted array
         const languages = Object.keys(languageMap).map(lang => ({
             name: lang.toUpperCase(),
             percentage: totalFiles > 0 ? Math.round((languageMap[lang] / totalFiles) * 100) : 0,
             color: getColorForLang(lang)
         })).sort((a, b) => b.percentage - a.percentage).slice(0, 4);
 
-        // Save streak/activity updates
+        // Save activity updates
         await user.save();
 
-        // Final Response
+        // --- D. FINAL RESPONSE ---
+        // Ensure keys match the ProfilePage.jsx expectations
         res.json({
             name: user.username,
             username: user.email ? user.email.split('@')[0] : user.username,
-            bio: user.bio,
-            joinDate: user.createdAt.toISOString().split('T')[0],
+            bio: user.bio || "No bio yet",
+            joinDate: user.createdAt ? user.createdAt.toISOString().split('T')[0] : "Recent",
             stats: {
                 projects: userProjects.length,
                 hoursCoded: Math.round(user.hoursCoded || 0), 
-                streak: user.streak,
+                streak: user.streak || 1,
                 collaborators: uniqueCollaborators.size,
                 shippedCount: deployedProjects.length 
             },
             languages: languages,
-            deployedProjects: deployedProjects 
+            deployedProjects: deployedProjects,
+            contributions: openSourceTrophies // ✅ This maps to setOpenSourceContributions
         });
 
     } catch (err) {
-        console.error("❌ Profile Error:", err);
-        res.status(500).json({ message: 'Server error' });
+        console.error("❌ Profile Controller Error:", err);
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
 

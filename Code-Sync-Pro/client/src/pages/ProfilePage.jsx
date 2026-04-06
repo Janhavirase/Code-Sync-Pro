@@ -53,7 +53,11 @@ const ProfilePage = () => {
                 setProfileData(data);
                 setFormData({ bio: data.bio, username: data.name }); 
                 // ✅ Update the deployed projects list from backend response
+               // ✅ Saves the private Github projects
                 setDeployedProjects(data.deployedProjects || []);
+                
+                // ✨ THE MISSING LINK: Save the Open Source Trophies to the UI!
+                setOpenSourceContributions(data.contributions || []);
             } else {
                 toast.error("Failed to load profile");
                 console.error("❌ BACKEND ERROR:", data);
