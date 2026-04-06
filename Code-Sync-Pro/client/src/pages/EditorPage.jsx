@@ -21,9 +21,9 @@ import DeployModal from '../components/DeployModal';
 import { 
     Files, Users, MessageSquare, Bot, MessageCircle, Folder,Sparkles,ArrowLeft,
     Settings, Play, Loader2, Download, Share2, PanelLeftOpen, PanelLeftClose,
-    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save,QrCode, Copy, LogOut
+    ChevronLeft, Plus, Trash2, Hash, UserPlus, Check, Video, VideoOff, Monitor, PhoneOff, Save,QrCode, Copy, LogOut,GitPullRequest
 } from 'lucide-react';
-
+import SubmitFixModal from '../components/SubmitFixModal';
 // ✅ IMPORT CUSTOM HOOKS
 import useEditorLayout from '../hooks/useEditorLayout';
 import useFileSystem from '../hooks/useFileSystem';
@@ -47,7 +47,12 @@ const EditorPage = () => {
     ];
 
     const [customInput, setCustomInput] = useState("");
+  const [isSubmitFixModalOpen, setIsSubmitFixModalOpen] = useState(false);
 
+// We need to know if this current room is a fork! 
+// (Assume we fetch project details into a variable called 'currentProjectMetadata')
+// Catch the project metadata sent from the Community Hub!
+const [currentProjectMetadata, setCurrentProjectMetadata] = useState(location.state?.projectMetadata || null);
     const { 
         files, setFiles, activeFileName, setActiveFileName, activeFileNameRef, 
         codeRef, fileHistoryRef, switchFile, createNewItem, deleteFile, handleBulkImport,
@@ -827,7 +832,18 @@ const handleDeployClick = () => {
     className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all active:scale-95"
 >
     Github
-</button>                        <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
+</button>  
+{/* ✨ THE SUBMIT FIX BUTTON (Only shows if this project is a fork) */}
+{currentProjectMetadata?.isFork && (
+    <button 
+        onClick={() => setIsSubmitFixModalOpen(true)} 
+        className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg transition-all animate-pulse shadow-emerald-500/20"
+    >
+        <GitPullRequest size={14} /> Submit Fix
+    </button>
+)}
+
+                      <button onClick={() => setIsShareModalOpen(true)} className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-500 rounded-full shadow-lg transition-all active:scale-95"><Share2 size={14} /> Share</button>
                         <button onClick={handleInvite} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all active:scale-95 shadow-lg ${inviteCopied ? 'bg-gray-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{inviteCopied ? <Check size={14} /> : <UserPlus size={14} />} {inviteCopied ? 'Copied' : 'Invite'}</button>
                         <button onClick={downloadZip} className="px-3 py-1 rounded-sm text-xs font-bold bg-[#333] hover:bg-[#444] text-white border border-gray-600">📥 Download</button>
                         <button className={`px-5 py-1 rounded-sm text-xs font-bold flex items-center gap-2 ${isCompiling ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-700'}`} onClick={handleRunCode} disabled={isCompiling}>{isCompiling ? 'Running...' : '▶ Run'}</button>
@@ -899,6 +915,13 @@ const handleDeployClick = () => {
                     </div>
                     {isSocketConnected && socketRef.current && <Whiteboard socket={socketRef.current} roomId={roomId} />}
                 </div>
+                <SubmitFixModal 
+    isOpen={isSubmitFixModalOpen}
+    onClose={() => setIsSubmitFixModalOpen(false)}
+    files={files}
+    projectMetadata={currentProjectMetadata}
+    currentUser={user}
+/>
             </main>
 
             {isCallActive && stream && (

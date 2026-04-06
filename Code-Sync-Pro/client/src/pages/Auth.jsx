@@ -10,15 +10,57 @@ const Auth = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [username, setUsername] = useState('');
-
-    const handleSubmit = (e) => {
+const handleSubmit = async (e) => {
         e.preventDefault();
+        
         if (!email || !password || (!isLogin && !username)) {
             toast.error('Please fill all fields');
             return;
         }
-        toast.success(isLogin ? 'Welcome back, Developer!' : 'Account created successfully!');
-        navigate('/'); 
+
+        try {
+            // 1. Determine if we are logging in or signing up
+            const endpoint = isLogin 
+                ? 'http://127.0.0.1:5000/api/auth/login'   // Adjust these URLs if your backend routes are named differently
+                : 'http://127.0.0.1:5000/api/auth/register';
+
+            const bodyData = isLogin 
+                ? { email, password } 
+                : { username, email, password };
+
+            // 2. Send the data to your Node.js backend
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+
+        const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Auth failed');
+            }
+
+            // ✨ OPTION 1: THE PERSISTENT STORE
+            // We save the token under a consistent key name 'token'
+          // 4. THE MAGIC: SAVE EVERYTHING
+            // We save the token separately AND inside userInfo to be double-safe
+            localStorage.setItem('token', data.token); 
+            
+            const userWithToken = { ...data.user, token: data.token };
+            localStorage.setItem('userInfo', JSON.stringify(userWithToken)); 
+
+            console.log("✅ SESSION SAVED SUCCESSFULLY");
+            toast.success('Welcome back!');
+            
+            // Use a small timeout to ensure storage is written before navigating
+            setTimeout(() => {
+                navigate('/');
+            }, 100);
+        } catch (error) {
+            console.error("Auth Error:", error);
+            toast.error(error.message);
+        }
     };
 
     return (

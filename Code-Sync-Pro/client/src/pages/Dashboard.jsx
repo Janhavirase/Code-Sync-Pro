@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { v4 as uuidV4 } from 'uuid';
 import toast from 'react-hot-toast';
+import { Globe,GitPullRequest, CheckCircle } from 'lucide-react'; // Or any icon you prefer
+import ReviewPRModal from '../components/ReviewPRModal';
 const Dashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -9,7 +11,9 @@ const Dashboard = () => {
     
     // ✅ NEW: Search State
     const [searchTerm, setSearchTerm] = useState("");
-
+const [inboxPRs, setInboxPRs] = useState([]);
+const [isInboxLoading, setIsInboxLoading] = useState(true);
+const [reviewingPR, setReviewingPR] = useState(null); // Holds the PR currently opened in the modal
     // --- LOGIC: USER MANAGEMENT ---
     const getSavedUser = () => {
         const saved = localStorage.getItem('userInfo');
@@ -31,7 +35,24 @@ const Dashboard = () => {
             fetchProjects(userId);
         }
     }, [userId]);
+useEffect(() => {
+    const fetchInbox = async () => {
+        const targetId = user?._id || user?.id;
+        if (!targetId) return;
 
+        try {
+            const response = await fetch(`http://127.0.0.1:5000/api/community/pr/inbox/${targetId}`);
+            const data = await response.json();
+            setInboxPRs(data);
+        } catch (error) {
+            console.error("Failed to load inbox", error);
+        } finally {
+            setIsInboxLoading(false);
+        }
+    };
+
+    fetchInbox();
+}, [user]);
     // --- API FUNCTIONS ---
     const fetchProjects = async (idToFetch) => {
         try {
@@ -48,7 +69,24 @@ const Dashboard = () => {
             console.error("Failed to load projects", err);
         }
     };
+const handleMergePR = async (prId) => {
+    const toastId = toast.loading("Merging code into your project...");
+    try {
+        const response = await fetch(`http://127.0.0.1:5000/api/community/pr/${prId}/merge`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) throw new Error("Merge failed");
 
+        toast.success("Code Merged Successfully!", { id: toastId });
+        
+        // Update UI to show it as merged
+        setInboxPRs(inboxPRs.map(pr => pr._id === prId ? { ...pr, status: 'merged' } : pr));
+
+    } catch (error) {
+        toast.error("Failed to merge.", { id: toastId });
+    }
+};
     const createNewProject = async () => {
         if (!userId || userId === 'guest') {
             toast.error("Please login to create a saved room");
@@ -152,10 +190,17 @@ console.log("🕵️ DEBUG USER DATA:", user);
                         </div>
                         <div className="text-left hidden md:block">
                             <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider leading-none mb-0.5">Explore</p>
+
                             <p className="text-sm font-bold text-gray-200 leading-none group-hover:text-white">Library</p>
                         </div>
                     </button>
-
+<button 
+                onClick={() => navigate('/community')}
+                className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg transition-all active:scale-95"
+            >
+                <Globe size={18} />
+                Community Hub
+            </button>
                     <button 
                         onClick={goToProfile} 
                         className="flex items-center gap-3 hover:bg-white/5 pl-3 pr-1 py-1 rounded-full transition-all group border border-transparent hover:border-white/5"
@@ -283,7 +328,57 @@ console.log("🕵️ DEBUG USER DATA:", user);
                         )
                     )}
                 </div>
+                {/* ✨ PULL REQUEST INBOX */}
+<div className="mt-12 max-w-5xl mx-auto">
+    <h2 className="text-xl font-black text-white flex items-center gap-2 mb-6">
+        <GitPullRequest size={24} className="text-emerald-400" />
+        Contributor Inbox
+    </h2>
+
+    <div className="bg-[#181818] border border-[#333] rounded-2xl p-6">
+        {isInboxLoading ? (
+            <p className="text-gray-500 text-sm text-center">Checking inbox...</p>
+        ) : inboxPRs.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center">You have no pending code fixes.</p>
+        ) : (
+            <div className="flex flex-col gap-4">
+                {inboxPRs.map((pr) => (
+                    <div key={pr._id} className="bg-[#252526] border border-[#444] rounded-xl p-5 flex justify-between items-center transition-all hover:border-emerald-500/50">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <h3 className="text-lg font-bold text-gray-200">{pr.title}</h3>
+                                {pr.status === 'pending' 
+                                    ? <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black uppercase px-2 py-1 rounded">Pending Review</span>
+                                    : <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase px-2 py-1 rounded flex items-center gap-1"><CheckCircle size={10}/> Merged</span>
+                                }
+                            </div>
+                            <p className="text-sm text-gray-400 mb-2">{pr.description}</p>
+                            <p className="text-xs text-gray-500 font-medium">Submitted by: <span className="text-emerald-400">@{pr.senderName}</span></p>
+                        </div>
+
+                        <div>
+                            {pr.status === 'pending' && (
+                                <button 
+    onClick={() => setReviewingPR(pr)} // 👈 Opens the modal instead of merging instantly!
+    className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-5 py-2.5 rounded-lg shadow-lg active:scale-95 transition-all"
+>
+    Review Code
+</button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        )}
+    </div>
+</div>
             </main>
+            <ReviewPRModal 
+    isOpen={!!reviewingPR} 
+    onClose={() => setReviewingPR(null)} 
+    pr={reviewingPR} 
+    onMerge={handleMergePR} // 👈 We pass your existing merge function right into the modal!
+/>
         </div>
     );
 };

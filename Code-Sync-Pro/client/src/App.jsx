@@ -11,7 +11,7 @@ import EditLibraryItem from './pages/EditLibraryItem';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import LibraryPage from './pages/LibraryPage';
-
+import CommunityHub from './pages/CommunityHub';
 // Admin Imports
 import AdminLayout from './pages/Admin/AdminLayout';
 import AdminDashboard from './pages/Admin/AdminDashboard';
@@ -130,6 +130,10 @@ function App() {
                     <Route path="/library" element={<LibraryPage />} />
                     <Route path="/library/edit/:id" element={<EditLibraryItem />} />
                     <Route path="/github/callback" element={<GithubCallback />} />
+<Route 
+    path="/community" 
+    element={<CommunityHub currentUser={JSON.parse(localStorage.getItem('user'))?.username || 'Anonymous'} />} 
+/>      
                     <Route
                         path="/editor/:roomId"
                         element={<EditorPage />}

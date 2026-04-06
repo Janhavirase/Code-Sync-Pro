@@ -18,6 +18,7 @@ const projectRoutes = require('./routes/projects');
 const aiRoutes = require('./routes/ai'); 
 const userRoutes = require('./routes/userRoutes'); // <--- ✅ NEW: Import your User Routes
 const templateRoutes = require('./routes/templates');
+const communityRoutes = require('./routes/community');
 // ✅ IMPORT MODELS (For Socket Logic only)
 const Project = require('./models/Project');
 const deployRoutes = require('./routes/deployRoutes');
@@ -26,7 +27,7 @@ const server = http.createServer(app);
 app.use(cors({
     origin: 'http://localhost:5173', 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 👈 Added PATCH here
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id','x-auth-token'],
     credentials: true
 }));
 
@@ -43,6 +44,8 @@ app.use('/api/users', userRoutes); // <--- ✅ CONNECT THE NEW BRAIN HERE
 app.use('/api/templates', templateRoutes);
 app.use('/api/deploy', deployRoutes);
 app.use('/api/admin', require('./routes/adminRoutes'));
+// Mount it under the /api/community path
+app.use('/api/community', communityRoutes);
 app.use('/api/execute', require('./routes/execute'));
 // ❌ DELETED: The old manual 'app.get(/profile)' code is GONE.
 // Now the server will look inside 'routes/userRoutes.js' for instructions!

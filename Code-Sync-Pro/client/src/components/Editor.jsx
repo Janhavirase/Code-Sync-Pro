@@ -21,7 +21,7 @@ const Editor = ({
     const editorRef = useRef(null);
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
-    
+
     // Separate refs so comments and cursors don't overwrite each other
     const commentDecorationsRef = useRef([]);
     const cursorDecorationsRef = useRef({}); 

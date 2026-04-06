@@ -6,20 +6,26 @@ const projectSchema = new mongoose.Schema({
     githubUrl: {
         type: String,
         default: null
-    }, // ✅ Comma added here
+    }, 
     
-    // ✅ Owner Link (Required for "Project Count")
+    // Owner Link (Required for "Project Count")
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     
-    // ✅ Collaborators List (Required for "Collaborators Count")
-    collaborators: [{ type: String }], // Stores usernames (e.g., ["jack", "jane"])
+    // Collaborators List (Required for "Collaborators Count")
+    collaborators: [{ type: String }], 
     
     // The Code Files
     files: [{
         name: String,
         language: String,
         value: String
-    }]
+    }],
+
+    // ✨ ADDED FOR PULL REQUESTS: The "Return Address"
+    isFork: { type: Boolean, default: false },
+    parentCommunityProjectId: { type: String }, // Links back to CommunityProject
+    parentOwnerId: { type: String }             // The person who receives the PR
+    
 }, { timestamps: true });
 
 module.exports = mongoose.model('Project', projectSchema);
