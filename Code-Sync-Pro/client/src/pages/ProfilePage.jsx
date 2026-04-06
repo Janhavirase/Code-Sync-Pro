@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid'; // ✅ Added for template instantiation
+import { GitMerge } from 'lucide-react'; // Add this to your lucide-react imports
 
 const ProfilePage = () => {
     const navigate = useNavigate();
@@ -20,6 +21,8 @@ const ProfilePage = () => {
     const [profileData, setProfileData] = useState(null);
     const [formData, setFormData] = useState({ bio: '', username: '' });
     const [deployedProjects, setDeployedProjects] = useState([]); // ✅ Added state to prevent ReferenceError
+    const [openSourceContributions, setOpenSourceContributions] = useState([]);
+    const [showAllTrophies, setShowAllTrophies] = useState(false);
 
     // ✅ 3. State for Library Contributions
     const [contributions, setContributions] = useState([]);
@@ -61,10 +64,13 @@ const ProfilePage = () => {
             setLoading(false);
         }
     };
-// ✅ ADD THESE LINES to fix "user is not defined"
+
+    // ✅ ADD THESE LINES to fix "user is not defined"
     const userInfo = JSON.parse(localStorage.getItem('userInfo'));
     const user = userInfo?.user || userInfo;
+
     // ✅ 5. Fetch Library Contributions (With Data Transformation)
+    // 🐛 THE BUG WAS HERE: This hook is now properly enclosed.
     useEffect(() => {
         if (!userId) return;
         
@@ -90,10 +96,28 @@ const ProfilePage = () => {
             }
         };
 
+        const fetchOpenSourceTrophies = async () => {
+            // Grab the username from local storage
+            const username = currentUser?.username || currentUser?.user?.username;
+            if (!username) return;
+
+            try {
+                // Secretly call the public route we just perfected!
+                const res = await fetch(`http://127.0.0.1:5000/api/auth/profile/${username}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setOpenSourceContributions(data.contributions || []);
+                }
+            } catch (err) {
+                console.error("Failed to load open source trophies", err);
+            }
+        };
+
         fetchProfile(); 
         fetchMyTemplates(); 
+        fetchOpenSourceTrophies(); // 👈 Call it here!
         
-    }, [userId]);
+    }, [userId]); 
 
     // 6. Handle Profile Edit & Save (Backend)
     const handleSave = async () => {
@@ -328,6 +352,71 @@ const ProfilePage = () => {
                         </div>
                     )}
                 </div>
+                {/* ✨ NEW: OPEN SOURCE TROPHIES SECTION */}
+         <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <GitMerge className="text-emerald-400" /> Open Source Trophies
+                            {/* ✨ The Total Count Badge */}
+                            {openSourceContributions.length > 0 && (
+                                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-white/10 text-gray-300 text-xs font-bold border border-white/10">
+                                    {openSourceContributions.length}
+                                </span>
+                            )}
+                        </h3>
+                    </div>
+
+                    {openSourceContributions.length > 0 ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* ✨ Logic: Show all if toggled, otherwise just slice the first 3 */}
+                                {(showAllTrophies ? openSourceContributions : openSourceContributions.slice(0, 3)).map((proj) => (
+                                    <div 
+                                        key={proj._id} 
+                                        onClick={() => navigate('/community')}
+                                        className="p-5 bg-black/40 border border-white/10 rounded-2xl hover:border-emerald-500/50 transition-all group cursor-pointer relative overflow-hidden"
+                                    >
+                                        <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
+                                        
+                                        <div className="flex justify-between items-start mb-2 relative z-10">
+                                            <h4 className="font-bold text-gray-200 group-hover:text-emerald-400 transition-colors pr-2 truncate">{proj.title}</h4>
+                                            <span className="text-[10px] text-emerald-400 font-black bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 uppercase tracking-widest shrink-0">
+                                                MERGED
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mb-5 line-clamp-2 relative z-10">{proj.description}</p>
+                                        
+                                        <div className="flex items-center gap-2 mt-auto border-t border-white/5 pt-3 relative z-10">
+                                            <div className="h-5 w-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-white/10">
+                                                {proj.authorName?.charAt(0).toUpperCase() || '?'}
+                                            </div>
+                                            <span className="text-xs text-gray-400">Maintained by <span className="text-gray-300 font-medium">{proj.authorName}</span></span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            {/* ✨ The Show More / Show Less Button (Only renders if they have more than 3) */}
+                            {openSourceContributions.length > 3 && (
+                                <div className="mt-6 flex justify-center">
+                                    <button 
+                                        onClick={() => setShowAllTrophies(!showAllTrophies)}
+                                        className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full text-xs font-bold text-gray-300 transition-all hover:scale-105"
+                                    >
+                                        {showAllTrophies ? "Collapse list ↑" : `See all ${openSourceContributions.length} contributions ↓`}
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="text-center py-10 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center">
+                            <GitMerge size={32} className="text-gray-700 mb-3" />
+                            <p className="text-gray-500 text-sm">No open source contributions yet.</p>
+                            <button onClick={() => navigate('/community')} className="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-bold text-gray-300 transition-colors">
+                                Browse Community Hub
+                            </button>
+                        </div>
+                    )}
+              
             </main>
 
             {/* Edit Modal Logic (Keep existing) */}
@@ -354,7 +443,7 @@ const ProfilePage = () => {
                     </div>
                 </div>
             )}
-        </div>
+            </div>
     );
 };
 

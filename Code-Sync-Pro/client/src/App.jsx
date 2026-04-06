@@ -18,7 +18,7 @@ import AdminDashboard from './pages/Admin/AdminDashboard';
 import AdminLibrary from './pages/Admin/AdminLibrary';
 import UsersManager from './pages/Admin/UsersManager';
 import SystemHealth from './pages/Admin/SystemHealth';
-
+import PublicProfile from './pages/PublicProfile'; // The New Public Flex Page
 function App() {
 
     // ✅ GLOBAL LISTENER FOR SYSTEM ALERTS (Broadcasts + Config Changes)
@@ -130,6 +130,7 @@ function App() {
                     <Route path="/library" element={<LibraryPage />} />
                     <Route path="/library/edit/:id" element={<EditLibraryItem />} />
                     <Route path="/github/callback" element={<GithubCallback />} />
+                    <Route path="/profile/:username" element={<PublicProfile />} />
 <Route 
     path="/community" 
     element={<CommunityHub currentUser={JSON.parse(localStorage.getItem('user'))?.username || 'Anonymous'} />} 

@@ -23,7 +23,8 @@ const userSchema = new mongoose.Schema({
     streak: { type: Number, default: 0 },
     lastActiveDate: { type: Date, default: null },
     hoursCoded: { type: Number, default: 0 },
-    
+    reputation: { type: Number, default: 0 },
+    totalMergedPRs: { type: Number, default: 0 },
     // --- Relationships ---
     projects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Project' }],
     collaborators: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] 

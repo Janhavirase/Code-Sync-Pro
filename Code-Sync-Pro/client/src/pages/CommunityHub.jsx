@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { GitFork, Star, Clock, Search, Code2, ArrowRight, X, UploadCloud } from 'lucide-react';
+import { ArrowLeft, Users,GitFork, Star, Clock, Search, Code2, ArrowRight, X, UploadCloud } from 'lucide-react';
 import { useNavigate } from 'react-router-dom'; // ✨ 1. ADD THIS IMPOR
 const CommunityHub = ({ currentFiles, currentUser }) => {
     const navigate = useNavigate();
@@ -231,6 +231,14 @@ const openPublishModal = async () => {
                             <UploadCloud size={18} />
                             <span>Publish Workspace</span>
                         </button>
+                        {/* ✨ THE ESCAPE HATCH */}
+<button 
+    onClick={() => navigate('/dashboard')} 
+    className="group flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-white transition-all bg-white/5 hover:bg-white/10 px-4 py-2 rounded-full border border-white/5 hover:border-white/10 shadow-sm"
+>
+    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+    Back to Dashboard
+</button>
                     </div>
 
                     {/* SEARCH BAR */}
@@ -298,6 +306,40 @@ const openPublishModal = async () => {
                                             ))}
                                         </div>
                                     </div>
+                                      {project.contributors && project.contributors.length > 0 && (
+        <div className="mt-5 pt-4 border-t border-[#333]/50 w-full">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-1">
+                <Users size={12} /> Top Contributors
+            </p>
+          <div className="flex -space-x-2 overflow-hidden">
+    {project.contributors.slice(0, 5).map((contributor, idx) => (
+        <div 
+            key={idx} 
+            onClick={() => {
+                // 🕵️‍♂️ DEBUGGING: This will tell us the exact string being sent
+                const identifier = contributor.userId || contributor.username;
+                console.log("🔍 DEBUG: Sending user to profile:", `"${contributor.username}"`);
+                navigate(`/profile/${identifier}`); // 👈 THIS IS THE MAGIC
+            }}
+            className="inline-block h-7 w-7 rounded-full ring-2 ring-[#252526] bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm cursor-pointer hover:scale-110 transition-transform"
+            title={contributor.username}
+        >
+            <span className="text-[9px] font-black text-white uppercase">
+                {contributor.username?.charAt(0) || '?'}
+            </span>
+        </div>
+    ))}
+
+    {project.contributors.length > 5 && (
+        <div className="inline-block h-7 w-7 rounded-full ring-2 ring-[#252526] bg-[#333] flex items-center justify-center">
+            <span className="text-[9px] font-bold text-gray-300">
+                +{project.contributors.length - 5}
+            </span>
+        </div>
+    )}
+</div>
+        </div>
+    )}
 
                                     {/* Action Buttons */}
                                     <div className="flex flex-col items-end gap-3 shrink-0 ml-6">

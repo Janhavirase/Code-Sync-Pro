@@ -14,6 +14,7 @@ const Dashboard = () => {
 const [inboxPRs, setInboxPRs] = useState([]);
 const [isInboxLoading, setIsInboxLoading] = useState(true);
 const [reviewingPR, setReviewingPR] = useState(null); // Holds the PR currently opened in the modal
+const [inboxTab, setInboxTab] = useState('pending');
     // --- LOGIC: USER MANAGEMENT ---
     const getSavedUser = () => {
         const saved = localStorage.getItem('userInfo');
@@ -329,45 +330,96 @@ console.log("🕵️ DEBUG USER DATA:", user);
                     )}
                 </div>
                 {/* ✨ PULL REQUEST INBOX */}
+{/* ✨ PULL REQUEST COMMAND CENTER */}
 <div className="mt-12 max-w-5xl mx-auto">
-    <h2 className="text-xl font-black text-white flex items-center gap-2 mb-6">
-        <GitPullRequest size={24} className="text-emerald-400" />
-        Contributor Inbox
-    </h2>
+    <div className="flex items-end justify-between mb-6">
+        <h2 className="text-xl font-black text-white flex items-center gap-2">
+            <GitPullRequest size={24} className="text-emerald-400" />
+            Contributor Inbox
+        </h2>
 
-    <div className="bg-[#181818] border border-[#333] rounded-2xl p-6">
+        {/* 🗂️ THE TABS */}
+        <div className="flex gap-2 bg-[#181818] p-1 rounded-xl border border-[#333]">
+            <button 
+                onClick={() => setInboxTab('pending')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                    inboxTab === 'pending' ? 'bg-[#252526] text-white shadow-md' : 'text-gray-500 hover:text-gray-300'
+                }`}
+            >
+                Needs Review
+                {inboxPRs.filter(pr => pr.status === 'pending').length > 0 && (
+                    <span className="bg-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full">
+                        {inboxPRs.filter(pr => pr.status === 'pending').length}
+                    </span>
+                )}
+            </button>
+            <button 
+                onClick={() => setInboxTab('history')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                    inboxTab === 'history' ? 'bg-[#252526] text-white shadow-md' : 'text-gray-500 hover:text-gray-300'
+                }`}
+            >
+                History
+            </button>
+        </div>
+    </div>
+
+    <div className="bg-[#181818] border border-[#333] rounded-3xl p-2 shadow-2xl">
         {isInboxLoading ? (
-            <p className="text-gray-500 text-sm text-center">Checking inbox...</p>
-        ) : inboxPRs.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center">You have no pending code fixes.</p>
+            <div className="p-10 text-center text-gray-500 text-sm font-bold animate-pulse">Checking inbox...</div>
         ) : (
-            <div className="flex flex-col gap-4">
-                {inboxPRs.map((pr) => (
-                    <div key={pr._id} className="bg-[#252526] border border-[#444] rounded-xl p-5 flex justify-between items-center transition-all hover:border-emerald-500/50">
-                        <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <h3 className="text-lg font-bold text-gray-200">{pr.title}</h3>
-                                {pr.status === 'pending' 
-                                    ? <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black uppercase px-2 py-1 rounded">Pending Review</span>
-                                    : <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase px-2 py-1 rounded flex items-center gap-1"><CheckCircle size={10}/> Merged</span>
-                                }
-                            </div>
-                            <p className="text-sm text-gray-400 mb-2">{pr.description}</p>
-                            <p className="text-xs text-gray-500 font-medium">Submitted by: <span className="text-emerald-400">@{pr.senderName}</span></p>
-                        </div>
-
-                        <div>
-                            {pr.status === 'pending' && (
-                                <button 
-    onClick={() => setReviewingPR(pr)} // 👈 Opens the modal instead of merging instantly!
-    className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-5 py-2.5 rounded-lg shadow-lg active:scale-95 transition-all"
->
-    Review Code
-</button>
-                            )}
-                        </div>
+            // ✨ THE SCROLLABLE VIEWPORT
+            <div className="max-h-[500px] overflow-y-auto pr-2 custom-scrollbar p-4 flex flex-col gap-3">
+                
+                {/* 1. Empty State: Inbox Zero (Pending) */}
+                {inboxTab === 'pending' && inboxPRs.filter(pr => pr.status === 'pending').length === 0 && (
+                    <div className="py-16 flex flex-col items-center justify-center text-center opacity-70">
+                        <CheckCircle size={48} className="text-emerald-500/50 mb-4" />
+                        <h3 className="text-lg font-bold text-gray-300">Inbox Zero</h3>
+                        <p className="text-gray-500 text-sm">You have no pending code fixes. Take a breath.</p>
                     </div>
-                ))}
+                )}
+
+                {/* 2. Empty State: No History */}
+                {inboxTab === 'history' && inboxPRs.filter(pr => pr.status === 'merged').length === 0 && (
+                    <div className="py-16 text-center">
+                        <p className="text-gray-500 text-sm font-medium">No merged PRs yet.</p>
+                    </div>
+                )}
+
+                {/* 3. Render the filtered PRs */}
+                {inboxPRs
+                    .filter(pr => pr.status === (inboxTab === 'pending' ? 'pending' : 'merged'))
+                    .map((pr) => (
+                        <div key={pr._id} className="bg-[#252526] border border-[#444] rounded-xl p-5 flex justify-between items-center transition-all hover:border-emerald-500/50 group">
+                            <div>
+                                <div className="flex items-center gap-3 mb-1">
+                                    <h3 className="text-lg font-bold text-gray-200">{pr.title}</h3>
+                                    {pr.status === 'pending' 
+                                        ? <span className="bg-yellow-500/20 text-yellow-400 text-[10px] font-black uppercase px-2 py-1 rounded">Pending Review</span>
+                                        : <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase px-2 py-1 rounded flex items-center gap-1"><CheckCircle size={10}/> Merged</span>
+                                    }
+                                </div>
+                                <p className="text-sm text-gray-400 mb-2">{pr.description}</p>
+                                <p className="text-xs text-gray-500 font-medium">
+                                    Submitted by: <span className="text-emerald-400">@{pr.senderName}</span>
+                                </p>
+                            </div>
+
+                            <div className="shrink-0 ml-4">
+                                {pr.status === 'pending' ? (
+                                    <button 
+                                        onClick={() => setReviewingPR(pr)} 
+                                        className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-5 py-2.5 rounded-lg shadow-lg active:scale-95 transition-all"
+                                    >
+                                        Review Code
+                                    </button>
+                                ) : (
+                                    <div className="px-6 py-2.5 text-xs font-bold text-gray-600 uppercase tracking-widest">Archived</div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
             </div>
         )}
     </div>

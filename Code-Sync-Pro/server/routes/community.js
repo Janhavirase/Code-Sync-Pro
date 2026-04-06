@@ -155,32 +155,64 @@ router.get('/pr/inbox/:userId', async (req, res) => {
 });
 
 // 🚀 MERGE A PULL REQUEST
+// 🚀 MERGE A PULL REQUEST
+// 🚀 MERGE A PULL REQUEST (WITH X-RAY LOGS)
 router.post('/pr/:prId/merge', async (req, res) => {
     try {
-        const pr = await PullRequest.findById(req.params.prId);
+        console.log("\n=============================================");
+        console.log("🚀 MERGE INITIATED");
         
-        if (!pr || pr.status !== 'pending') {
-            return res.status(400).json({ error: "PR is either invalid or already processed." });
-        }
+        console.log("STEP 1: Finding PR:", req.params.prId);
+        const pr = await PullRequest.findById(req.params.prId);
+        if (!pr || pr.status !== 'pending') return res.status(400).json({ error: "Invalid PR" });
 
-        // 1. Find the original Community Project
+        console.log("STEP 2: Finding Target Project:", pr.targetProjectId);
         const targetProject = await CommunityProject.findById(pr.targetProjectId);
-        if (!targetProject) {
-            return res.status(404).json({ error: "Original project no longer exists." });
+        if (!targetProject) return res.status(404).json({ error: "Project missing" });
+
+        console.log("STEP 3: Scrubbing Files");
+        const cleanFiles = pr.files.map(file => ({
+            name: file.name,
+            language: file.language || 'html',
+            value: file.value || ''
+        }));
+        targetProject.codeSnapshot = cleanFiles;
+
+        console.log("STEP 4: Saving Cleaned Files to DB");
+        await targetProject.save(); 
+        
+        console.log("STEP 5: Handling Contributors Wall");
+        // Bulletproof check: Ensure contributors array exists before pushing!
+        if (!targetProject.contributors) targetProject.contributors = []; 
+        const isAlreadyContributor = targetProject.contributors.some(c => c.userId === pr.senderId);
+        if (!isAlreadyContributor) {
+            targetProject.contributors.push({
+                userId: pr.senderId,
+                username: pr.senderName
+            });
+            await targetProject.save();
         }
 
-        // 2. THE MERGE: Replace the old code with the new fixed code!
-        targetProject.codeSnapshot = pr.files;
-        await targetProject.save();
+        console.log("STEP 6: Handling User Reputation");
+        const User = require('../models/User'); // Ensure this path is correct for your app!
+        if (pr.senderId) {
+            await User.findByIdAndUpdate(pr.senderId, {
+                $inc: { reputation: 50, totalMergedPRs: 1 }
+            });
+        }
 
-        // 3. Mark the PR as Merged
+        console.log("STEP 7: Updating PR Status");
         pr.status = 'merged';
         await pr.save();
 
+        console.log("✅ MERGE COMPLETE! SUCCESS!");
+        console.log("=============================================\n");
         res.status(200).json({ message: "Code merged successfully! 🎉" });
 
     } catch (err) {
-        console.error("🔥 Merge Error:", err);
+        console.log("🔥 FATAL CRASH HAPPENED HERE:");
+        console.error(err.message); // This will print EXACTLY what broke
+        console.log("=============================================\n");
         res.status(500).json({ error: "Failed to merge PR." });
     }
 });
