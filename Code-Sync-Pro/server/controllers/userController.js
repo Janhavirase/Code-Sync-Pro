@@ -1,6 +1,7 @@
-const User = require('../models/User');
-const Project = require('../models/Project');
-const CommunityProject = require('../models/CommunityProject');
+import User from '../models/User.js';
+import Project from '../models/Project.js';
+import CommunityProject from '../models/CommunityProject.js';
+
 // --- Helper Functions ---
 const isYesterday = (d1, d2) => {
     const oneDay = 24 * 60 * 60 * 1000;
@@ -31,7 +32,7 @@ const getColorForLang = (lang) => {
 
 // --- 1. Get Profile & Calculate Stats ---
 // --- 1. Get Profile & Calculate Stats ---
-exports.getUserProfile = async (req, res) => {
+export const getUserProfile = async (req, res) => {
     try {
         const { userId } = req.params;
         console.log("⚡ CONTROLLER: Calculating full profile for", userId);
@@ -156,7 +157,7 @@ exports.getUserProfile = async (req, res) => {
 };
 
 // --- 2. Update Activity Hours ---
-exports.updateUserActivity = async (req, res) => {
+export const updateUserActivity = async (req, res) => {
     try {
         const { userId } = req.body;
         const user = await User.findById(userId);
@@ -172,7 +173,7 @@ exports.updateUserActivity = async (req, res) => {
 };
 
 // --- 3. Update Profile Information ---
-exports.updateUserProfile = async (req, res) => {
+export const updateUserProfile = async (req, res) => {
     try {
         const { bio, username } = req.body;
         

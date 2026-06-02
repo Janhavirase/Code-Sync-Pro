@@ -36,6 +36,9 @@ const EditorPage = () => {
     const navigate = useNavigate();
     const socketRef = useRef(null);
     
+    // 🚨 NEW: Reference to hold the Monaco Editor instance
+    const editorRef = useRef(null);
+    
     const { layoutMode, setLayoutMode, consoleSize, setConsoleSize, isResizing, startResizing } = useEditorLayout();
     const { output, isCompiling, executeCode, clearOutput } = useCodeRunner();
 
@@ -180,6 +183,34 @@ const [isOffline, setIsOffline] = useState(false);
     // ✨ THE HYBRID SYNC SYSTEM (PEERS + SUITCASE)
     // ==========================================
     const filesRef = useRef(files);
+    
+    // 🚨 NEW: Safe Code Injection without needing raw monaco API imports
+    const insertCodeAtCursor = (codeSnippet) => {
+        if (!editorRef.current) {
+            toast.error("Editor not initialized yet.");
+            return;
+        }
+
+        const editor = editorRef.current;
+        const position = editor.getPosition();
+
+        // Preserves undo history instead of breaking the editor state
+        editor.executeEdits("ai-voice-command", [{
+            range: {
+                startLineNumber: position.lineNumber,
+                startColumn: position.column,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+            },
+            text: codeSnippet,
+            forceMoveMarkers: true
+        }]);
+
+        // Auto-format after insertion
+        editor.getAction('editor.action.formatDocument').run();
+        editor.focus();
+    };
+
     const commentsRef = useRef(comments);
     useEffect(() => { filesRef.current = files; }, [files]);
     useEffect(() => { commentsRef.current = comments; }, [comments]);
@@ -329,7 +360,18 @@ socketRef.current.on('server:call-accepted', async () => {
                     prevClients.map(c => c.username === username ? { ...c, activeFile: fileName } : c)
                 );
             });
-
+// Inside EditorPage.jsx socket listeners
+socketRef.current.on('peer-ai-generating', ({ username }) => {
+    toast(`🤖 ${username}'s Copilot is writing code...`, {
+        icon: '✨',
+        position: 'top-right',
+        style: {
+            background: '#2d2d2d',
+            color: '#a855f7', // Cool purple color
+            border: '1px solid #a855f7'
+        }
+    });
+});
             // ❌ DELETED the duplicate SYNC_CODE listener that was sitting here
 
             // 💬 Listen for incoming comments
@@ -574,7 +616,35 @@ const handleDeployClick = () => {
             toast.error('Server error.'); 
         }
     };
+    // Add this inside your EditorPage component
+// Ensure this is inside your EditorPage component
+const triggerAutoIndex = (fileName, fileContent, roomId) => {
+    // 🚨 Access your socket via the ref, not a global variable
+    const socket = socketRef.current; 
+    
+    if (!socket || !roomId) return;
 
+    socket.emit("code-change", {
+        projectId: roomId,
+        fileName: fileName,
+        fileContent: fileContent,
+        language: 'javascript'
+    });
+};
+// Inside your Editor.jsx
+useEffect(() => {
+    // Derive the value safely
+    const activeFile = files.find(f => f.name === activeFileName);
+    const content = activeFile?.value;
+
+    if (content && roomId) {
+        const handler = setTimeout(() => {
+            triggerAutoIndex(activeFileName, content, roomId);
+        }, 3000); // Debounce: Wait 3 seconds after typing stops
+
+        return () => clearTimeout(handler);
+    }
+}, [files, activeFileName, roomId]);
     if (!location.state && !userId) return <Navigate to="/" state={{ roomId }} />;
 
     return (
@@ -749,15 +819,20 @@ const handleDeployClick = () => {
                 )}
             </div>       
 
-            {activeSidebarTab === 'ai' && (
-                <div className="h-full overflow-hidden">
-                    <AIAnalysisPanel 
-                        currentCode={files.find(f => f.name === activeFileName)?.value} 
-                        language={files.find(f => f.name === activeFileName)?.language || 'javascript'} 
-                        onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} 
-                    />
-                </div>
-            )}
+           {activeSidebarTab === 'ai' && (
+     <div className="h-full overflow-hidden">
+         <AIAnalysisPanel 
+             projectId={roomId} 
+             activeFile={activeFileName} 
+             currentCode={files.find(f => f.name === activeFileName)?.value} 
+             language={files.find(f => f.name === activeFileName)?.language || 'javascript'} 
+             onApplyCode={(newCode) => { handleCodeChange(newCode); toast.success("Code updated!"); }} 
+             insertCodeAtCursor={insertCodeAtCursor} // 👈 Added the Voice-to-Code prop!
+             socket={socketRef.current}      // 👈 ADD THIS
+    currentUser={user?.username}
+         />
+     </div>
+ )}
         </div>
     </div>
 </div>
@@ -855,6 +930,7 @@ const handleDeployClick = () => {
                     <div className={`flex-1 flex flex-col relative ${activeMainView === 'editor' ? 'flex' : 'hidden'}`}>
                         <div className="flex-1 relative">
                             <Editor 
+                                editorRef={editorRef} // 🚨 IMPORTANT: You must pass the ref inside your Editor.jsx component's onMount prop!
                                 key={activeFileName} 
                                 socketRef={socketRef} 
                                 roomId={roomId} 

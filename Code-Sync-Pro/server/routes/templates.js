@@ -1,9 +1,8 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const templateController = require('../controllers/templateController');
+import { createTemplate,getTemplates,deleteTemplate} from '../controllers/templateController.js';// Define Routes
+router.post('/',createTemplate);
+router.get('/', getTemplates); // usage: /api/templates?userId=123
+router.delete('/:templateId', deleteTemplate);
 
-router.post('/', templateController.createTemplate);
-router.get('/', templateController.getTemplates); // usage: /api/templates?userId=123
-router.delete('/:templateId', templateController.deleteTemplate);
-
-module.exports = router;
+export default router;

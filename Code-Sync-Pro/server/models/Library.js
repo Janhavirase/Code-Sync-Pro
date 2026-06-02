@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const LibrarySchema = new mongoose.Schema({
     title: {
@@ -31,4 +31,9 @@ const LibrarySchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-module.exports = mongoose.model('Library', LibrarySchema);
+
+// ... schema definition remains the same ...
+
+const Library = mongoose.models.Library || mongoose.model('Library', LibrarySchema);
+
+export default Library;

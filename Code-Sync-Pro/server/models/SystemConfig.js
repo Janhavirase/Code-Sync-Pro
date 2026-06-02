@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const systemConfigSchema = new mongoose.Schema({
     allowSignups: { type: Boolean, default: true },
@@ -7,4 +7,4 @@ const systemConfigSchema = new mongoose.Schema({
     lastUpdatedBy: { type: String } // Admin username
 }, { timestamps: true });
 
-module.exports = mongoose.model('SystemConfig', systemConfigSchema);
+export default mongoose.model('SystemConfig', systemConfigSchema);

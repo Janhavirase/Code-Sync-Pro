@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 
 const Editor = ({ 
+    editorRef,         // 🚨 1. ADDED: Accept the ref from EditorPage.jsx!
     onCodeChange, 
     code, 
     activeFileName,
@@ -13,22 +14,24 @@ const Editor = ({
     fontFamily = 'monospace',
     wordWrap = false,
     comments,
-    // ✨ NEW PROPS FOR MULTIPLAYER CURSORS:
     socket,
     roomId,
     username
 }) => {
-    const editorRef = useRef(null);
+    // 🚨 2. DELETED: const editorRef = useRef(null); 
+    // We deleted that line so we use the parent's ref instead!
+
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
 
-    // Separate refs so comments and cursors don't overwrite each other
     const commentDecorationsRef = useRef([]);
     const cursorDecorationsRef = useRef({}); 
 
     // 1. Handle Editor Mounting
     function handleEditorDidMount(editor, monaco) {
-        editorRef.current = editor;
+        if (editorRef) {
+            editorRef.current = editor; // 🚨 3. Now this saves directly back to EditorPage!
+        }
         monacoRef.current = monaco; 
         setEditorLoaded(true);
 
@@ -39,7 +42,7 @@ const Editor = ({
         });
 
         // Track cursor for line selection AND multiplayer broadcasting
-       editor.onDidChangeCursorPosition((e) => {
+        editor.onDidChangeCursorPosition((e) => {
             if (onLineSelect) onLineSelect(e.position.lineNumber, false);
             
             if (socket && roomId && username) {
@@ -47,12 +50,13 @@ const Editor = ({
                     roomId,
                     socketId: socket.id,
                     username: username,
-                    fileName: activeFileName, // ✨ SEND THE FILE NAME
+                    fileName: activeFileName, 
                     position: e.position,
                     color: '#ffaa00'
                 });
             }
         });
+
         // Add Right-Click "Add Comment" Action
         editor.addAction({
             id: 'add-comment-action',
@@ -66,6 +70,8 @@ const Editor = ({
             }
         });
     }
+
+    // ... (KEEP THE REST OF YOUR FILE EXACTLY THE SAME FROM HERE DOWN)
 
     // ==========================================
     // ✨ RECEIVE MULTIPLAYER CURSORS

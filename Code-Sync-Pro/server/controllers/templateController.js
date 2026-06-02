@@ -1,7 +1,7 @@
-const Template = require('../models/Template');
+import Template from '../models/Template.js';
 
 // 1. Create a Template
-exports.createTemplate = async (req, res) => {
+export const createTemplate = async (req, res) => {
     try {
         const { title, desc, code, language, userId } = req.body;
         
@@ -21,7 +21,7 @@ exports.createTemplate = async (req, res) => {
 };
 
 // 2. Get Templates (For specific user OR all public ones)
-exports.getTemplates = async (req, res) => {
+export const getTemplates = async (req, res) => {
     try {
         const { userId } = req.query;
         
@@ -37,7 +37,7 @@ exports.getTemplates = async (req, res) => {
 };
 
 // 3. Delete Template
-exports.deleteTemplate = async (req, res) => {
+export const deleteTemplate = async (req, res) => {
     try {
         const { templateId } = req.params;
         await Template.findByIdAndDelete(templateId);

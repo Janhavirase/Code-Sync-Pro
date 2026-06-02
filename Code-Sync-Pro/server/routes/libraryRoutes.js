@@ -1,9 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-
 // ✅ FIX: Import 'Library' (The one with isApproved and owner), NOT 'Template'
-const Library = require('../models/Library'); 
-
+import Library from '../models/Library.js';
 // --- GET All Public/Approved Items ---
 router.get('/', async (req, res) => {
     try {
@@ -84,4 +82,4 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-module.exports = router;
+export default router;

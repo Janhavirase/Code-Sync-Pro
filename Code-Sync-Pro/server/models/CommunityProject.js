@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const communityProjectSchema = new mongoose.Schema({
     title: { type: String, required: true },
@@ -18,4 +18,4 @@ const communityProjectSchema = new mongoose.Schema({
     originalProjectId: { type: mongoose.Schema.Types.ObjectId, ref: 'CommunityProject', default: null } // For tracking forks
 }, { timestamps: true });
 
-module.exports = mongoose.model('CommunityProject', communityProjectSchema);
+export default mongoose.model('CommunityProject',  communityProjectSchema);

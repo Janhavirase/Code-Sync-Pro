@@ -1,8 +1,8 @@
-const Project = require('../models/Project');
-const User = require('../models/User');
+import Project from '../models/Project.js';
+import User from '../models/User.js';
 
 // 1. ✅ CREATE PROJECT (The Critical One for Stats)
-exports.createProject = async (req, res) => {
+export const createProject = async (req, res) => {
     try {
         // We expect these from the frontend
         const { name, roomId, userId, description, language, code } = req.body;
@@ -44,7 +44,7 @@ exports.createProject = async (req, res) => {
 };
 
 // 2. GET ALL PROJECTS (For Dashboard)
-exports.getAllProjects = async (req, res) => {
+export const getAllProjects = async (req, res) => {
     try {
         const { userId } = req.params;
 
@@ -59,7 +59,7 @@ exports.getAllProjects = async (req, res) => {
 };
 
 // 3. GET SINGLE PROJECT (For Editor Loading)
-exports.getProjectByRoomId = async (req, res) => {
+export const getProjectByRoomId = async (req, res) => {
     try {
         const { roomId } = req.params;
         const project = await Project.findOne({ roomId });
@@ -74,7 +74,7 @@ exports.getProjectByRoomId = async (req, res) => {
     }
 };
 // --- Delete a Project ---
-exports.deleteProject = async (req, res) => {
+export const deleteProject = async (req, res) => {
     try {
         const { projectId } = req.params;
         const deletedProject = await Project.findByIdAndDelete(projectId);
@@ -89,7 +89,7 @@ exports.deleteProject = async (req, res) => {
     }
 };
 // 4. SAVE CODE (Updates the project content)
-exports.saveProjectCode = async (req, res) => {
+export const saveProjectCode = async (req, res) => {
     try {
         const { roomId, files } = req.body;
 

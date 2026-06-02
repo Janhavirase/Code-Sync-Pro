@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const templateSchema = new mongoose.Schema({
     title: { type: String, required: true },
@@ -15,4 +15,4 @@ const templateSchema = new mongoose.Schema({
     likes: { type: Number, default: 0 }
 }, { timestamps: true });
 
-module.exports = mongoose.model('Template', templateSchema);
+export default mongoose.model('Template', templateSchema);

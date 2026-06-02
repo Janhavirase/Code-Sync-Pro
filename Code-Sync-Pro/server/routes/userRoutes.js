@@ -1,9 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const userController = require('../controllers/userController');
-
-// Define Routes
-router.get('/profile/:userId', userController.getUserProfile);
-router.post('/activity', userController.updateUserActivity);
- router.put('/profile/:userId', userController.updateUserProfile);
-module.exports = router;
+import { getUserProfile, updateUserActivity, updateUserProfile } from '../controllers/userController.js';// Define Routes
+router.get('/profile/:userId',getUserProfile);
+router.post('/activity',updateUserActivity);
+ router.put('/profile/:userId',updateUserProfile);
+export default router;

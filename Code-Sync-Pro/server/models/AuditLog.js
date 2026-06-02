@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const auditLogSchema = new mongoose.Schema({
     adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -13,4 +13,4 @@ const auditLogSchema = new mongoose.Schema({
 // Auto-delete logs older than 30 days (Senior Dev Move: Data Retention Policy)
 auditLogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 2592000 });
 
-module.exports = mongoose.model('AuditLog', auditLogSchema);
+export default mongoose.model('AuditLog', auditLogSchema);

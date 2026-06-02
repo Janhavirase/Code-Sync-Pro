@@ -1,5 +1,5 @@
-const axios = require('axios');
-const Project = require('../models/Project');
+import axios from 'axios';
+import Project from '../models/Project.js';
 
 // ✅ HELPER: Check if a file exists on GitHub to get its SHA (prevents 422 errors)
 const getShaIfExists = async (owner, repo, path, token) => {
@@ -14,7 +14,7 @@ const getShaIfExists = async (owner, repo, path, token) => {
     }
 };
 
-exports.deployToGitHub = async (req, res) => {
+export const deployToGitHub = async (req, res) => {
     const { title, desc, isPrivate, roomId, files } = req.body;
     const authHeader = req.headers.authorization;
     const GITHUB_TOKEN = authHeader?.split(' ')[1];

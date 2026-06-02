@@ -1,5 +1,4 @@
-const mongoose = require('mongoose');
-
+import mongoose from 'mongoose';
 const projectSchema = new mongoose.Schema({
     roomId: { type: String, required: true, unique: true },
     name: { type: String, default: "Untitled Project" },
@@ -27,5 +26,4 @@ const projectSchema = new mongoose.Schema({
     parentOwnerId: { type: String }             // The person who receives the PR
     
 }, { timestamps: true });
-
-module.exports = mongoose.model('Project', projectSchema);
+export default mongoose.model('Project', projectSchema);

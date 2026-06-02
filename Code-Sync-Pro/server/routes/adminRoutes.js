@@ -1,11 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const os = require('os'); // Moved to top for cleaner code
-const User = require('../models/User');
-const Project = require('../models/Project');
-const Library = require('../models/Library'); 
-const AuditLog = require('../models/AuditLog');
-const SystemConfig = require('../models/SystemConfig');
+import os from 'os'; // Moved to top for cleaner code
+import User from '../models/User.js';
+import Project from '../models/Project.js';
+import Library from '../models/Library.js'; 
+import AuditLog from '../models/AuditLog.js';
+import SystemConfig from '../models/SystemConfig.js';
 // 🛡️ MIDDLEWARE: Check if the user is an Admin
 const isAdmin = async (req, res, next) => {
     try {
@@ -278,4 +278,4 @@ router.put('/config', isAdmin, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-module.exports = router;
+export default router;

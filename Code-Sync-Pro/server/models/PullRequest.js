@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const PullRequestSchema = new mongoose.Schema({
     targetProjectId: { // The original public Community Project
@@ -34,4 +34,4 @@ const PullRequestSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-module.exports = mongoose.model('PullRequest', PullRequestSchema);
+export default mongoose.model('Library', PullRequestSchema);

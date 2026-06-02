@@ -1,11 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const CommunityProject = require('../models/CommunityProject'); 
-const Project = require('../models/Project'); // Your private project model
-const { v4: uuidv4 } = require('uuid'); // To generate a new room ID
+import CommunityProject from '../models/CommunityProject.js'; 
+import Project from '../models/Project.js'; // Your private project model
+import { v4 as uuidv4 } from 'uuid'; // To generate a new room ID
 // ✨ IMPORT YOUR AUTH MIDDLEWARE ✨
-const auth = require('../middleware/auth'); 
-const PullRequest = require('../models/PullRequest');
+import auth from '../middleware/auth.js'; 
+import PullRequest from '../models/PullRequest.js';
 // Drop the 'auth' middleware right into the route definition
 // 🔓 REMOVED 'auth' middleware so no token is required
 router.post('/publish', async (req, res) => {
@@ -216,4 +216,4 @@ router.post('/pr/:prId/merge', async (req, res) => {
         res.status(500).json({ error: "Failed to merge PR." });
     }
 });
-module.exports = router;
+export default router;

@@ -35,13 +35,19 @@ const Home = () => {
         toast.success('Generated unique room ID');
     };
 
-    const joinRoom = () => {
-        if (!roomId || !username) {
-            toast.error('Room ID & Username required');
-            return;
-        }
-        navigate(`/editor/${roomId}`, { state: { username } });
-    };
+   const joinRoom = () => {
+    if (!roomId || !username) {
+        toast.error('Room ID & Username required');
+        return;
+    }
+
+    // FIX: Clean the roomId in case the user pasted the full URL
+    // This splits the string by '/' and grabs only the last part (the UUID)
+    const cleanRoomId = roomId.split('/').pop();
+
+    // Navigate using the cleaned ID
+    navigate(`/editor/${cleanRoomId}`, { state: { username } });
+};
 
     const handleAuth = async () => {
         if (!email || !password || (!isLoginMode && !username)) {

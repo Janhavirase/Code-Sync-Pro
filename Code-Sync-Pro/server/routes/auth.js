@@ -1,9 +1,10 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const User = require('../models/User'); // Ensure you have a User model
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const CommunityProject = require('../models/CommunityProject'); // Make sure this is imported!
+import User from '../models/User.js'; // Ensure you have a User model
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import CommunityProject from '../models/CommunityProject.js'; // Make sure this is imported!
+
 // REGISTER ROUTE
 router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
@@ -148,4 +149,5 @@ router.get('/profile/:identifier', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-module.exports = router;
+
+export default router;

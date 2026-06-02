@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const Project = require('../models/Project');
-const User = require('../models/User'); // ✅ CRITICAL IMPORT
+import Project from '../models/Project.js';
+import User from '../models/User.js'; // ✅ CRITICAL IMPORT
 
 // 1. GET ALL PROJECTS FOR A USER
 router.get('/', async (req, res) => {
@@ -104,4 +104,5 @@ router.delete('/:projectId', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-module.exports = router;
+
+export default router;

@@ -1,28 +1,40 @@
-require('dotenv').config(); 
-    // Add these near your other imports at the top
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-const express = require('express');
-const app = express();
-const http = require('http');
-const { Server } = require('socket.io');
-const ACTIONS = require('./Actions');
-const cors = require('cors'); 
-const connectDB = require('./db');
-const axios = require('axios');
-const https = require('https'); // Native Node module
+import 'dotenv/config';    // Add these near your other imports at the top
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import ACTIONS from './Actions.js';
+import cors from 'cors'; 
+import connectDB from './db.js';
+import axios from 'axios';
+import https from 'https'; // Native Node module
+
 // ✅ IMPORT ROUTES
-const authRoutes = require('./routes/auth'); 
-const projectRoutes = require('./routes/projects'); 
-const aiRoutes = require('./routes/ai'); 
-const userRoutes = require('./routes/userRoutes'); // <--- ✅ NEW: Import your User Routes
-const templateRoutes = require('./routes/templates');
-const communityRoutes = require('./routes/community');
+import authRoutes from './routes/auth.js'; 
+import projectRoutes from './routes/projects.js'; 
+import aiRoutes from './routes/aiRoutes.js'; 
+import userRoutes from './routes/userRoutes.js'; // <--- ✅ NEW: Import your User Routes
+import templateRoutes from './routes/templates.js';
+import communityRoutes from './routes/community.js';
+import deployRoutes from './routes/deployRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import executeRoutes from './routes/execute.js';
+import libraryRoutes from './routes/libraryRoutes.js';
+
 // ✅ IMPORT MODELS (For Socket Logic only)
-const Project = require('./models/Project');
-const deployRoutes = require('./routes/deployRoutes');
+import Project from './models/Project.js';
+import { embedAndStoreFile } from "./services/ragService.js";
+
+// 👇 RECREATE __dirname FOR ES MODULES (Required for Docker RCE)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
 const server = http.createServer(app);
+
 // 👇 ENABLE HTTP CORS
 app.use(cors({
     origin: 'http://localhost:5173', 
@@ -43,13 +55,14 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/users', userRoutes); // <--- ✅ CONNECT THE NEW BRAIN HERE
 app.use('/api/templates', templateRoutes);
 app.use('/api/deploy', deployRoutes);
-app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/admin', adminRoutes);
 // Mount it under the /api/community path
 app.use('/api/community', communityRoutes);
-app.use('/api/execute', require('./routes/execute'));
+app.use('/api/execute', executeRoutes);
 // ❌ DELETED: The old manual 'app.get(/profile)' code is GONE.
 // Now the server will look inside 'routes/userRoutes.js' for instructions!
-app.use('/api/library', require('./routes/libraryRoutes'));
+app.use('/api/library', libraryRoutes);
+
 // --- SOCKET.IO SETUP ---
 const io = new Server(server, {
     cors: {
@@ -59,6 +72,7 @@ const io = new Server(server, {
 });
 
 const userSocketMap = {};
+const indexingTimeouts = {};
 
 function getAllConnectedClients(roomId) {
     return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
@@ -70,6 +84,7 @@ function getAllConnectedClients(roomId) {
         }
     );
 }
+
 // --- REMOTE CODE EXECUTION (RCE) ENDPOINT ---
 app.post('/api/execute', (req, res) => {
     const { code, language } = req.body;
@@ -95,8 +110,6 @@ app.post('/api/execute', (req, res) => {
     // -m "50m": Limit RAM so they can't crash your server
     // --network none: Disable internet (prevents hacking/DDoS)
     // -v: Mount the temp file into the container
-    // 3. Build the Docker Sandbox Command
-  // 3. Build the Docker Sandbox Command
     // We convert Windows backslashes to forward slashes for Docker compatibility
     const linuxFriendlyPath = filePath.replace(/\\/g, '/');
     
@@ -126,6 +139,7 @@ app.post('/api/execute', (req, res) => {
         res.json({ output: stdout });
     });
 });
+
 app.post('/api/github/get-token', async (req, res) => {
     const { code } = req.body;
 
@@ -160,16 +174,19 @@ app.post('/api/github/get-token', async (req, res) => {
         res.status(500).json({ error: "Internal Server Error during GitHub handshake" });
     }
 });
+
 io.on('connection', (socket) => {
     // 🚨 THE WIRETAP
     socket.onAny((eventName, ...args) => {
         console.log(`[WIRETAP] 📡 Caught event: "${eventName}"`);
     });
-// 🖱️ MULTIPLAYER CURSORS
+
+    // 🖱️ MULTIPLAYER CURSORS
     socket.on('cursor-change', (payload) => {
         // payload now contains fileName, position, username, etc.
         socket.in(payload.roomId).emit('cursor-change', payload);
     });
+
    // 📺 SCREEN SHARE LOCKS
     socket.on('screen-share-started', ({ roomId, username }) => {
         console.log(`🔒 [LOCK] User [${username}] locked Room [${roomId}]`); // ✨ ADD THIS
@@ -180,11 +197,13 @@ io.on('connection', (socket) => {
         console.log(`🔓 [UNLOCK] Room [${roomId}] is free`); // ✨ ADD THIS
         socket.in(roomId).emit('screen-share-stopped');
     });
+
     // ❌ CALL REJECTED
     socket.on('client:reject-call', ({ callerId }) => {
         // Forward the rejection specifically to the person who started the call
         socket.to(callerId).emit('server:call-rejected');
     });
+
     // 1. JOIN
     socket.on(ACTIONS.JOIN, async ({ roomId, username }) => { 
         if (!username) return;
@@ -246,57 +265,57 @@ io.on('connection', (socket) => {
         io.to(socketId).emit(ACTIONS.SYNC_CODE, { files });
     });
 
-// Inside io.on('connection', (socket) => { ... })
+    // Inside io.on('connection', (socket) => { ... })
 
-// 1. User A invites the room
-// 🚨 THIS IS THE MISSING KICKSTART
-// It tells the user who just joined the call who else they need to connect to.
-socket.on('request-call-join', ({ roomId }) => {
-    // 1. Find everyone currently in this specific room
-    const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
-    
-    // 2. Filter out the person asking, so they don't call themselves
-    const otherUsers = clientsInRoom.filter(id => id !== socket.id);
-    
-    // 3. Send the phonebook back to the frontend
-    socket.emit('all-users', otherUsers);
-});
-socket.on('client:invite-call', ({ roomId, username }) => {
-    socket.to(roomId).emit('server:invite-call', { 
-        from: username, 
-        callerId: socket.id 
+    // 1. User A invites the room
+    // 🚨 THIS IS THE MISSING KICKSTART
+    // It tells the user who just joined the call who else they need to connect to.
+    socket.on('request-call-join', ({ roomId }) => {
+        // 1. Find everyone currently in this specific room
+        const clientsInRoom = Array.from(io.sockets.adapter.rooms.get(roomId) || []);
+        
+        // 2. Filter out the person asking, so they don't call themselves
+        const otherUsers = clientsInRoom.filter(id => id !== socket.id);
+        
+        // 3. Send the phonebook back to the frontend
+        socket.emit('all-users', otherUsers);
     });
-});
 
-// 2. User B accepts the invitation
-socket.on('client:accept-call', ({ roomId, callerId }) => {
-    // Tell User A that User B is ready to handshake
-    io.to(callerId).emit('server:call-accepted', { signalTarget: socket.id });
-    // Tell User B to prepare their own video
-    socket.emit('server:prepare-local-stream');
-});
-// 3. User A sends their WebRTC "Offer" (Signal) to User B
-socket.on("sending-signal", (payload) => {
-    // This forwards User A's connection data to User B
-    io.to(payload.userToSignal).emit('user-joined', { 
-        signal: payload.signal, 
-        callerID: payload.callerID 
+    socket.on('client:invite-call', ({ roomId, username }) => {
+        socket.to(roomId).emit('server:invite-call', { 
+            from: username, 
+            callerId: socket.id 
+        });
     });
-});
 
-// 4. User B sends their "Answer" back to User A
-socket.on("returning-signal", (payload) => {
-    // This completes the handshake so they can see each other
-    io.to(payload.callerID).emit('receiving-returned-signal', { 
-        signal: payload.signal, 
-        id: socket.id 
+    // 2. User B accepts the invitation
+    socket.on('client:accept-call', ({ roomId, callerId }) => {
+        // Tell User A that User B is ready to handshake
+        io.to(callerId).emit('server:call-accepted', { signalTarget: socket.id });
+        // Tell User B to prepare their own video
+        socket.emit('server:prepare-local-stream');
     });
-});
+
+    // 3. User A sends their WebRTC "Offer" (Signal) to User B
+    socket.on("sending-signal", (payload) => {
+        // This forwards User A's connection data to User B
+        io.to(payload.userToSignal).emit('user-joined', { 
+            signal: payload.signal, 
+            callerID: payload.callerID 
+        });
+    });
+
+    // 4. User B sends their "Answer" back to User A
+    socket.on("returning-signal", (payload) => {
+        // This completes the handshake so they can see each other
+        io.to(payload.callerID).emit('receiving-returned-signal', { 
+            signal: payload.signal, 
+            id: socket.id 
+        });
+    });
+
     // 3. FILE SYSTEM EVENTS
-   // 3. FILE SYSTEM EVENTS (Make sure this is in server.js!)
-    // Inside server.js
-    // Inside server.js
-   // 3. FILE SYSTEM EVENTS (Using hardcoded strings to bypass the bug)
+    // Using hardcoded strings to bypass the bug
     socket.on('file-created', ({ roomId, files }) => {
         console.log(`🚨 [SERVER] Syncing NEW FILE to room ${roomId}`);
         socket.to(roomId).emit('file-created', { files });
@@ -307,18 +326,21 @@ socket.on("returning-signal", (payload) => {
         socket.to(roomId).emit('file-deleted', { files });
     });
     
-socket.on('user:active_file', ({ roomId, username, fileName }) => {
-    // Broadcast to everyone else in the room
-    socket.in(roomId).emit('user:active_file', { username, fileName });
-});
+    socket.on('user:active_file', ({ roomId, username, fileName }) => {
+        // Broadcast to everyone else in the room
+        socket.in(roomId).emit('user:active_file', { username, fileName });
+    });
+
     socket.on('sync-history', ({ socketId, history }) => {
         io.to(socketId).emit('sync-history', { history });
     });
-        // 🎛️ ADMIN CONFIG UPDATE
+
+    // 🎛️ ADMIN CONFIG UPDATE
     socket.on('admin:configUpdate', (newConfig) => {
         // Broadcast to everyone so their UI updates instantly
         io.emit('server:configUpdate', newConfig);
     });
+
     // 📢 ADMIN BROADCAST EVENT
     socket.on('admin:notify', ({ message }) => {
         // In a real production app, you would check if socket.user.role === 'admin' here
@@ -333,6 +355,7 @@ socket.on('user:active_file', ({ roomId, username, fileName }) => {
             time: new Date().toISOString() 
         });
     });
+
     socket.on('send-message', ({ roomId, message, username, time }) => {
         console.log(`🛑 [DEBUG] SERVER RECEIVED MESSAGE from ${username}: "${message}" intended for room: ${roomId}`);
         
@@ -341,34 +364,64 @@ socket.on('user:active_file', ({ roomId, username, fileName }) => {
         console.log(`🚀 [DEBUG] SERVER BROADCASTED to room: ${roomId}`);
     });
 
-   // 5. WHITEBOARD EVENTS (Upgraded to pass the ENTIRE object)
-socket.on('whiteboard-draw', (data) => {
-    // We send the exact 'data' object we received, untouched, to everyone else in the room
-    socket.to(data.roomId).emit('whiteboard-draw', data);
-});
-
-socket.on('whiteboard-clear', ({ roomId }) => {
-    socket.to(roomId).emit('whiteboard-clear');
-});
-
-    // 6. VIDEO CALL SIGNALING
-    socket.on('sending-signal', payload => {
-        io.to(payload.userToSignal).emit('user-joined', { 
-            signal: payload.signal, 
-            callerID: payload.callerID 
-        });
+    // 5. WHITEBOARD EVENTS (Upgraded to pass the ENTIRE object)
+    socket.on('whiteboard-draw', (data) => {
+        // We send the exact 'data' object we received, untouched, to everyone else in the room
+        socket.to(data.roomId).emit('whiteboard-draw', data);
     });
 
-    socket.on('returning-signal', payload => {
-        io.to(payload.callerID).emit('receiving-returned-signal', { 
-            signal: payload.signal, 
-            id: socket.id 
-        });
+    socket.on('whiteboard-clear', ({ roomId }) => {
+        socket.to(roomId).emit('whiteboard-clear');
     });
-socket.on('comment:new', ({ roomId, comment }) => {
+
+    socket.on('comment:new', ({ roomId, comment }) => {
         // This tells the server: "Broadcast this comment to everyone in the room EXCEPT the sender"
         socket.in(roomId).emit('comment:new', { comment });
     });
+// Inside your Socket.IO connection block on the server
+socket.on('ai-generating', ({ roomId, username }) => {
+    // Broadcast to everyone EXCEPT the person who asked the AI
+    socket.to(roomId).emit('peer-ai-generating', { username });
+});
+    // Listen for real-time code changes from the editor
+   // Listen for real-time code changes from the editor
+socket.on("code-change", async ({ projectId, fileName, fileContent, language }) => {
+    
+    // 1. Broadcast the code change to other users
+    socket.to(projectId).emit("code-update", { fileName, fileContent });
+
+    // 2. Debugging: Verify incoming data immediately
+    if (!projectId || !fileContent) {
+        console.warn(`[Auto-Indexing] Skipping: Missing projectId (${projectId}) or content (${!!fileContent})`);
+        return;
+    }
+
+    // 3. RAG PIPELINE: Debounce
+    const timeoutKey = `${projectId}_${fileName}`;
+    
+    if (indexingTimeouts[timeoutKey]) {
+        clearTimeout(indexingTimeouts[timeoutKey]);
+    }
+
+    indexingTimeouts[timeoutKey] = setTimeout(async () => {
+        try {
+            console.log(`[Auto-Indexing] Triggering for: ${fileName} | Project: ${projectId}`);
+            
+            // Call the service with the data already available in the scope
+            await embedAndStoreFile(fileContent, language || 'javascript', {
+                projectId,
+                fileName
+            });
+
+            console.log(`✅ [Auto-Indexing] Successfully vectorized ${fileName}`);
+            io.to(projectId).emit("ai-index-sync", { fileName, status: "updated" });
+            
+        } catch (err) {
+            console.error(`❌ [Auto-Indexing] Failed for ${fileName}:`, err.message);
+        }
+    }, 3000); 
+});
+
     // 7. DISCONNECT
     socket.on('disconnecting', () => {
         const rooms = [...socket.rooms];

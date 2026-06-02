@@ -1,8 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { deployToGitHub } = require('../controllers/deployController');
-
+import { deployToGitHub } from '../controllers/deployController.js';
 // This defines the "door"
 router.post('/github', deployToGitHub);
 
-module.exports = router;
+export default router;

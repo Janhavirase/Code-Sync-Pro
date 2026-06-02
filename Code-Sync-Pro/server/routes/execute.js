@@ -1,11 +1,10 @@
 
 //for docker(localhosttt)
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-
+import fs from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
 // 🧠 THE SENIOR DEV CONFIG MAP
 const LANGUAGE_CONFIG = {
     javascript: { 
@@ -90,8 +89,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-module.exports = router;
-
+export default router;
 
 
 
@@ -104,10 +102,9 @@ module.exports = router;
 
 
 // // //for/after deployment (api-->jdoodle)
-// const express = require('express');
+// import express from 'express';
 // const router = express.Router();
-// const axios = require('axios'); // Make sure to run `npm install axios` in your backend!
-
+// import axios from 'axios'; // Make sure to run `npm install axios` in your backend!
 // // 🧠 JDoodle Language Mapping
 // const JDOODLE_CONFIG = {
 //     javascript: { language: 'nodejs', versionIndex: '4' }, 
@@ -156,4 +153,4 @@ module.exports = router;
 //     }
 // });
 
-// module.exports = router;
+// export default router;
