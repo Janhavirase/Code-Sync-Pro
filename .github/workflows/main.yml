@@ -25,7 +25,7 @@ jobs:
       - name: Build and Push Backend
         uses: docker/build-push-action@v4
         with:
-          context: ./server
+          context: ./Code-Sync-Pro/server
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/codesync-backend:latest
 
