@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Mail, Lock, User, ArrowRight, Github } from 'lucide-react';
-
+import apiClient from '../api.js';
 const Auth = () => {
     const [isLogin, setIsLogin] = useState(true);
     const navigate = useNavigate();
@@ -21,19 +21,20 @@ const handleSubmit = async (e) => {
         try {
             // 1. Determine if we are logging in or signing up
             const endpoint = isLogin 
-                ? 'http://127.0.0.1:5000/api/auth/login'   // Adjust these URLs if your backend routes are named differently
-                : 'http://127.0.0.1:5000/api/auth/register';
+                ? '/api/auth/login'   // Adjust these URLs if your backend routes are named differently
+                : '/api/auth/register';
 
             const bodyData = isLogin 
                 ? { email, password } 
                 : { username, email, password };
 
             // 2. Send the data to your Node.js backend
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(bodyData)
-            });
+            // const response = await fetch(endpoint, {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify(bodyData)
+            // });
+            const response = await apiClient.post(endpoint, bodyData);
 
         const data = await response.json();
             

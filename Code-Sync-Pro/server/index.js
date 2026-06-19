@@ -35,9 +35,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 
+// ✅ ADD YOUR VERCEL DOMAINS HERE
+const allowedOrigins = [
+    "http://localhost:5173", 
+    "https://code-sync-pro-iota.vercel.app", 
+    "https://code-sync-4d7qnkoxe-janhavirases-projects.vercel.app"
+];
+
 // 👇 ENABLE HTTP CORS
 app.use(cors({
-    origin: '*', 
+    origin: allowedOrigins, 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 👈 Added PATCH here
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id','x-auth-token'],
     credentials: true
@@ -66,8 +73,9 @@ app.use('/api/library', libraryRoutes);
 // --- SOCKET.IO SETUP ---
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: allowedOrigins,
         methods: ["GET", "POST"],
+        credentials: true
     },
 });
 
