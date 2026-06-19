@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 const EditLibraryItem = () => {
     const { id } = useParams();
@@ -10,9 +11,9 @@ const EditLibraryItem = () => {
     useEffect(() => {
         const fetchItem = async () => {
             try {
-                const res = await fetch(`http://127.0.0.1:5000/api/library/${id}`);
-                const data = await res.json();
-                setFormData({ title: data.title, desc: data.desc });
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get(`/api/library/${id}`);
+                setFormData({ title: res.data.title, desc: res.data.desc });
             } catch (err) {
                 toast.error("Failed to load contribution details");
             }
@@ -23,16 +24,11 @@ const EditLibraryItem = () => {
     const handleUpdate = async (e) => {
         e.preventDefault();
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/library/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData),
-            });
+            // ✅ PRODUCTION FIX: Using apiClient (automatic JSON stringification)
+            await apiClient.put(`/api/library/${id}`, formData);
 
-            if (res.ok) {
-                toast.success("Contribution updated! ✨");
-                navigate('/profile'); // Go back to profile after success
-            }
+            toast.success("Contribution updated! ✨");
+            navigate('/profile'); // Go back to profile after success
         } catch (err) {
             toast.error("Update failed");
         }

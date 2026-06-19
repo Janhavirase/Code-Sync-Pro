@@ -1,28 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 const SystemHealth = () => {
     const [health, setHealth] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());
 
-    // Secure User ID
-    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-    const userId = userInfo?.user?._id || userInfo?._id;
-
     // --- FETCH HEALTH DATA ---
     const fetchHealth = async () => {
         try {
-            const res = await fetch('http://127.0.0.1:5000/api/admin/health', {
-                headers: { 'x-user-id': userId }
-            });
-            const data = await res.json();
-            if (res.ok) {
-                setHealth(data);
-                setLastUpdated(new Date());
-            }
+            // ✅ PRODUCTION FIX: Using apiClient
+            // The interceptor automatically attaches the necessary auth headers
+            const res = await apiClient.get('/api/admin/health');
+            setHealth(res.data);
+            setLastUpdated(new Date());
         } catch (err) {
             console.error("Health Check Failed:", err);
+            // Optionally suppress errors here since this runs every 3 seconds
         }
     };
 
@@ -135,11 +130,11 @@ const SystemHealth = () => {
                         </div>
                         <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <span className="text-gray-500 text-xs">Process ID</span>
-                            <span className="text-white font-mono text-sm">{process.pid}</span>
+                            <span className="text-white font-mono text-sm">{health.os.pid}</span>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-gray-500 text-xs">Node Version</span>
-                            <span className="text-white font-mono text-sm">{process.version}</span>
+                            <span className="text-white font-mono text-sm">{health.os.version}</span>
                         </div>
                     </div>
                 </div>

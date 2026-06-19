@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 const DeployModal = ({ project, onClose ,files,onSuccess}) => {
     // 1. New States for Form
@@ -14,41 +15,33 @@ const [isPrivate, setIsPrivate] = useState(false);
      // ✨ 1. Grab the token from local storage!
         const token = localStorage.getItem('github_token');
     setStatus('deploying');
-    try {
-        console.log("🚀 Data being sent:", { 
-    title: deployName, 
-    token: token ? "Exists" : "MISSING", 
-    filesCount: files?.length 
-});
-        const res = await fetch('http://127.0.0.1:5000/api/deploy/github', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json','Authorization': `Bearer ${token}` },
-            body: JSON.stringify({
+   try {
+            // ✅ PRODUCTION FIX: Using apiClient
+            // apiClient.interceptors will automatically attach x-user-id if needed
+            const response = await apiClient.post('/api/deploy/github', {
                 title: deployName,
                 desc: deployDesc,
                 isPrivate: isPrivate,
                 code: project.code,
                 language: project.language,
-                roomId: project.roomId, // ✅ Added: This is crucial for the MongoDB update
+                roomId: project.roomId,
                 files: files
-            })
-        });
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-        const data = await res.json();
-
-        if (res.ok && data.success) {
+            const data = response.data;
+        if (data.success) {
             setRepoUrl(data.repoUrl);
             setStatus('success');
             if (onSuccess) onSuccess(data.repoUrl); // Passes URL to EditorPage
             toast.success("Shipped to GitHub! 🚀");
         } else {
-            // ✅ Fixed: The 'else' now correctly belongs to the 'if (res.ok...)'
-            
             throw new Error(data.error || "Deployment failed");
         }
     } catch (err) {
         console.error("Deployment Error:", err);
-        toast.error(err.message);
+        toast.error(err.message || "Deployment failed");
         setStatus('idle');
     }
 };

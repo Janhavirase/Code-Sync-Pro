@@ -1,32 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 // --- ICONS (Micro-Components for cleaner JSX) ---
-const IconSearch = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
+const IconCheck = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>;
+const IconX = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>;
+const IconEdit = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
 const IconTrash = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
-const IconCopy = () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>;
-const IconShield = () => <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>;
 
 const UsersManager = () => {
     const [users, setUsers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
 
-    // Auth Info
-    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-    const currentUserId = userInfo?.user?._id || userInfo?._id;
-
     // --- 1. FETCH USERS ---
     const fetchUsers = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('http://127.0.0.1:5000/api/admin/users', {
-                headers: { 'x-user-id': currentUserId } // Auth Check
-            });
-            const data = await res.json();
-            
-            if (Array.isArray(data)) {
-                setUsers(data);
+            // ✅ PRODUCTION FIX: Using apiClient (x-user-id handled by interceptor)
+            const res = await apiClient.get('/api/admin/users');
+            if (Array.isArray(res.data)) {
+                setUsers(res.data);
             } else {
                 toast.error("Failed to load users");
             }
@@ -45,18 +39,11 @@ const UsersManager = () => {
         if (!window.confirm(`⚠️ DANGER ZONE:\n\nAre you sure you want to delete user "${username}"?\nThis will erase their account and ALL their projects.\n\nThis cannot be undone.`)) return;
 
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/admin/users/${userId}`, {
-                method: 'DELETE',
-                headers: { 'x-user-id': currentUserId }
-            });
-
-            if (res.ok) {
-                toast.success(`User ${username} terminated.`);
-                setUsers(prev => prev.filter(u => u._id !== userId));
-            } else {
-                const data = await res.json();
-                toast.error(data.message || "Delete failed");
-            }
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.delete(`/api/admin/users/${userId}`);
+            
+            toast.success(`User ${username} terminated.`);
+            setUsers(prev => prev.filter(u => u._id !== userId));
         } catch (err) {
             toast.error("Error executing delete");
         }
@@ -170,7 +157,7 @@ const UsersManager = () => {
                                             ? "bg-purple-500/10 text-purple-400 border-purple-500/20" 
                                             : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                                         }`}>
-                                            {user.role === 'admin' && <IconShield />}
+                                            {user.role === 'admin' && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>}
                                             {user.role}
                                         </div>
                                     </td>

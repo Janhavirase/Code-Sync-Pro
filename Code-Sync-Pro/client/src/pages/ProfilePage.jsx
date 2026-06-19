@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { v4 as uuidv4 } from 'uuid'; // ✅ Added for template instantiation
 import { GitMerge } from 'lucide-react'; // Add this to your lucide-react imports
+import apiClient from '../api.js';
 
 const ProfilePage = () => {
     const navigate = useNavigate();
@@ -40,30 +41,25 @@ const ProfilePage = () => {
             return;
         }
 
-        console.log(`🚀 STARTING FETCH: http://127.0.0.1:5000/api/users/profile/${userId}`);
+        console.log(`🚀 STARTING FETCH: Profile`);
 
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/users/profile/${userId}`);
-            console.log("📡 RESPONSE STATUS:", res.status);
-            
-            const data = await res.json();
+            // ✅ PRODUCTION FIX: Using apiClient
+            const res = await apiClient.get(`/api/users/profile/${userId}`);
+            const data = res.data;
             console.log("📦 DATA RECEIVED:", data);
 
-            if (res.ok) {
-                setProfileData(data);
-                setFormData({ bio: data.bio, username: data.name }); 
-                // ✅ Update the deployed projects list from backend response
-               // ✅ Saves the private Github projects
-                setDeployedProjects(data.deployedProjects || []);
-                
-                // ✨ THE MISSING LINK: Save the Open Source Trophies to the UI!
-                setOpenSourceContributions(data.contributions || []);
-            } else {
-                toast.error("Failed to load profile");
-                console.error("❌ BACKEND ERROR:", data);
-            }
+            setProfileData(data);
+            setFormData({ bio: data.bio, username: data.name }); 
+            // ✅ Update the deployed projects list from backend response
+            // ✅ Saves the private Github projects
+            setDeployedProjects(data.deployedProjects || []);
+            
+            // ✨ THE MISSING LINK: Save the Open Source Trophies to the UI!
+            setOpenSourceContributions(data.contributions || []);
         } catch (err) {
             console.error("❌ NETWORK ERROR:", err);
+            toast.error("Failed to load profile");
         } finally {
             setLoading(false);
         }
@@ -81,20 +77,19 @@ const ProfilePage = () => {
         const fetchMyTemplates = async () => {
             try {
                 console.log(`🔍 FETCHING TEMPLATES FOR: ${userId}`);
-                const res = await fetch(`http://127.0.0.1:5000/api/templates?userId=${userId}`);
-                const data = await res.json();
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get(`/api/templates?userId=${userId}`);
+                const data = res.data;
                 
                 console.log("📦 RAW DB DATA:", data);
 
-                if (res.ok) {
-                    const formattedData = data.map(t => ({
-                        ...t,
-                        id: t._id, 
-                        files: t.files || [{ name: 'main', language: t.language, value: t.code }]
-                    }));
-                    
-                    setContributions(formattedData);
-                }
+                const formattedData = data.map(t => ({
+                    ...t,
+                    id: t._id, 
+                    files: t.files || [{ name: 'main', language: t.language, value: t.code }]
+                }));
+                
+                setContributions(formattedData);
             } catch (err) {
                 console.error("❌ Failed to load templates", err);
             }
@@ -106,12 +101,9 @@ const ProfilePage = () => {
             if (!username) return;
 
             try {
-                // Secretly call the public route we just perfected!
-                const res = await fetch(`http://127.0.0.1:5000/api/auth/profile/${username}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setOpenSourceContributions(data.contributions || []);
-                }
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get(`/api/auth/profile/${username}`);
+                setOpenSourceContributions(res.data.contributions || []);
             } catch (err) {
                 console.error("Failed to load open source trophies", err);
             }
@@ -126,24 +118,17 @@ const ProfilePage = () => {
     // 6. Handle Profile Edit & Save (Backend)
     const handleSave = async () => {
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/users/profile/${userId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    bio: formData.bio, 
-                    username: formData.username 
-                })
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.put(`/api/users/profile/${userId}`, { 
+                bio: formData.bio, 
+                username: formData.username 
             });
             
-            if (res.ok) {
-                toast.success("Profile Updated!");
-                setIsEditing(false);
-                fetchProfile(); 
-            } else {
-                toast.error("Update failed");
-            }
+            toast.success("Profile Updated!");
+            setIsEditing(false);
+            fetchProfile(); 
         } catch (err) {
-            toast.error("Server error");
+            toast.error("Update failed");
         }
     };
 
@@ -155,7 +140,8 @@ const ProfilePage = () => {
     const handleDeleteTemplate = async (id) => {
         if (!window.confirm("Delete this template?")) return;
         try {
-            await fetch(`http://127.0.0.1:5000/api/templates/${id}`, { method: 'DELETE' });
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.delete(`/api/templates/${id}`);
             setContributions(contributions.filter(t => t._id !== id));
             toast.success("Deleted from Database");
         } catch (err) {
@@ -299,7 +285,6 @@ const ProfilePage = () => {
                     <p className="text-gray-500 text-sm line-clamp-2 mb-6">{template.desc}</p>
                     
                     <div className="flex gap-2 pt-4 border-t border-white/5">
-                        {/* OPEN BUTTON */}
                         <button 
                             onClick={() => handleUseTemplate(template)} 
                             className="flex-1 bg-white/5 hover:bg-white/10 text-white py-2 rounded-lg text-xs font-bold transition-colors"
@@ -307,7 +292,6 @@ const ProfilePage = () => {
                             Open
                         </button>
 
-                        {/* ✅ RESTORED EDIT BUTTON */}
                         <button 
                             onClick={() => navigate(`/library/edit/${template._id}`)}
                             className="px-3 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-bold hover:bg-blue-500 hover:text-white transition-all"
@@ -316,7 +300,6 @@ const ProfilePage = () => {
                             ✏️
                         </button>
 
-                        {/* DELETE BUTTON */}
                         <button 
                             onClick={() => handleDeleteTemplate(template._id)} 
                             className="px-3 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg text-xs font-bold transition-colors"
@@ -420,7 +403,6 @@ const ProfilePage = () => {
                             </button>
                         </div>
                     )}
-              
             </main>
 
             {/* Edit Modal Logic (Keep existing) */}

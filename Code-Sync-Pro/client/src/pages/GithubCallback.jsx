@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 const GithubCallback = () => {
     const [searchParams] = useSearchParams();
@@ -16,13 +17,10 @@ const GithubCallback = () => {
             console.log("🕵️ BREADCRUMB FOUND:", returnPath); 
 
             // 2. Send the code to your backend to trade for the Access Token
-            fetch('http://127.0.0.1:5000/api/github/get-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code })
-            })
-            .then(res => res.json())
-            .then(data => {
+            // ✅ PRODUCTION FIX: Using apiClient
+            apiClient.post('/api/github/get-token', { code })
+            .then(response => {
+                const data = response.data;
                 if (data.access_token) {
                     // 3. Save the golden ticket!
                     localStorage.setItem('github_token', data.access_token);

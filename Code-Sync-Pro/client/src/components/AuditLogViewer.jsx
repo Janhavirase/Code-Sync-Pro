@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-
+import apiClient from '../api.js';
 const AuditLogViewer = () => {
     const [logs, setLogs] = useState([]);
 
@@ -22,17 +22,21 @@ const AuditLogViewer = () => {
                 return;
             }
 
-            try {
-                const res = await fetch('http://127.0.0.1:5000/api/admin/audit-logs', {
-                    headers: { 'x-user-id': userId }
-                });
-                const data = await res.json();
-                if (Array.isArray(data)) setLogs(data);
+        try {
+                // apiClient handles the base URL automatically
+                // We assume you have a request interceptor in api.js that adds auth tokens
+                const response = await apiClient.get('/api/admin/audit-logs');
+                
+                if (Array.isArray(response.data)) {
+                    setLogs(response.data);
+                }
             } catch (err) {
                 console.error("Failed to fetch logs:", err);
+                toast.error("Failed to load audit logs");
+            } finally {
+                setLoading(false);
             }
         };
-
         fetchLogs();
     }, []);
 

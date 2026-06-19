@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 // ✅ OFFICIAL TEMPLATES
 const OFFICIAL_TEMPLATES = [
@@ -86,21 +87,18 @@ const LibraryPage = () => {
     useEffect(() => {
         const fetchCommunityLibrary = async () => {
             try {
-                // Fetch approved items from your backend
-                const res = await fetch('http://127.0.0.1:5000/api/library');
-                if (res.ok) {
-                    const data = await res.json();
-                    
-                    // Map MongoDB _id to frontend id
-                    const dbTemplates = data.map(item => ({
-                        ...item,
-                        id: item._id, // React needs 'id', MongoDB gives '_id'
-                        type: 'community'
-                    }));
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get('/api/library');
+                
+                // Map MongoDB _id to frontend id
+                const dbTemplates = res.data.map(item => ({
+                    ...item,
+                    id: item._id, // React needs 'id', MongoDB gives '_id'
+                    type: 'community'
+                }));
 
-                    // Update state: Official + Database items
-                    setTemplates([...OFFICIAL_TEMPLATES, ...dbTemplates]);
-                }
+                // Update state: Official + Database items
+                setTemplates([...OFFICIAL_TEMPLATES, ...dbTemplates]);
             } catch (err) {
                 console.error("Failed to load community templates:", err);
                 toast.error("Could not connect to library server");
@@ -154,7 +152,6 @@ const LibraryPage = () => {
 
         try {
             // ✅ FIX 1: Format Data to match 'Library' Schema
-            // The schema needs 'roomId' and 'files' (not just 'code')
             const templateData = {
                 title: newTemplateName,
                 desc: newTemplateDesc || "No description",
@@ -171,31 +168,17 @@ const LibraryPage = () => {
 
             console.log("🚀 Sending to MongoDB:", templateData);
 
-            // ✅ FIX 2: Point to the Correct Route (/api/library)
-            const res = await fetch('http://127.0.0.1:5000/api/library', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(templateData)
-            });
+            // ✅ FIX 2: Point to the Correct Route (/api/library) using apiClient
+            await apiClient.post('/api/library', templateData);
 
-            const data = await res.json();
-
-            if (res.ok) {
-                toast.success("Contribution Sent for Approval! 🕒");
-                
-                // Note: We DO NOT add it to setTemplates() immediately
-                // because it needs admin approval first!
-                
-                // Reset form
-                setIsCreateModalOpen(false);
-                setNewTemplateName('');
-                setNewTemplateDesc('');
-                setNewTemplateCode('');
-                setContributionStep(1);
-            } else {
-                toast.error(data.error || "Failed to save");
-            }
-
+            toast.success("Contribution Sent for Approval! 🕒");
+            
+            // Reset form
+            setIsCreateModalOpen(false);
+            setNewTemplateName('');
+            setNewTemplateDesc('');
+            setNewTemplateCode('');
+            setContributionStep(1);
         } catch (err) {
             console.error("Save Error:", err);
             toast.error("Server connection failed");
@@ -344,7 +327,6 @@ const LibraryPage = () => {
                             {/* STEP 2: CODE EDITOR */}
                             <div className={`absolute inset-0 flex flex-col transition-transform duration-500 ease-in-out ${contributionStep === 2 ? 'translate-x-0' : 'translate-x-full'}`}>
                                 <div className="bg-[#181818] px-6 py-2 border-b border-[#333] flex justify-between items-center">
-                                    {/* ✅ FIX: Dynamically show correct filename */}
                                     <span className="text-xs text-blue-400 font-mono">{getFileName(newTemplateLang)}</span>
                                     <span className="text-xs text-gray-500">Editor Mode</span>
                                 </div>

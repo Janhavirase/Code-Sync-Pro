@@ -3,6 +3,8 @@ import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { ArrowLeft, Users,GitFork, Star, Clock, Search, Code2, ArrowRight, X, UploadCloud } from 'lucide-react';
 import { useNavigate } from 'react-router-dom'; // ✨ 1. ADD THIS IMPOR
+import apiClient from '../api.js';
+
 const CommunityHub = ({ currentFiles, currentUser }) => {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
@@ -27,11 +29,11 @@ const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
 useEffect(() => {
         const fetchCommunityProjects = async () => {
             try {
-                const response = await fetch('http://127.0.0.1:5000/api/community/feed');
-                const data = await response.json();
+                // ✅ PRODUCTION FIX: Using apiClient
+                const response = await apiClient.get('/api/community/feed');
                 
-                if (data && data.projects) {
-                    setProjects(data.projects); 
+                if (response.data && response.data.projects) {
+                    setProjects(response.data.projects); 
                 }
             } catch (error) {
                 console.error("Error fetching community projects:", error);
@@ -83,20 +85,10 @@ useEffect(() => {
         console.log("🔑 6. Token Check:", token ? "Token Found!" : "NULL/MISSING!");
         try {
             console.log("⏳ 8. Firing request to backend...");
-            const response = await fetch('http://127.0.0.1:5000/api/community/publish', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // 'x-auth-token': token
-                },
-                body: JSON.stringify(newProjectData)
-            });
+            // ✅ PRODUCTION FIX: Using apiClient
+            const response = await apiClient.post('/api/community/publish', newProjectData);
             
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || data.message || "Failed to publish project.");
-            }
+            const data = response.data;
             
             toast.success("Project published to the community! 🎉");
             setProjects([data.project, ...projects]);
@@ -106,7 +98,7 @@ useEffect(() => {
             
         } catch (error) {
             console.error("🔥 12. Publish Error Caught:", error);
-            toast.error(error.message);
+            toast.error(error.message || "Failed to publish project.");
         }
     };
 const openPublishModal = async () => {
@@ -135,8 +127,9 @@ const openPublishModal = async () => {
             }
 
             // 3. Fetch your projects from the backend
-            const res = await fetch(`http://127.0.0.1:5000/api/projects?userId=${targetId}`);
-            const data = await res.json();
+            // ✅ PRODUCTION FIX: Using apiClient
+            const res = await apiClient.get(`/api/projects?userId=${targetId}`);
+            const data = res.data;
 
             // 4. Populate the modal!
             if (Array.isArray(data)) {
@@ -166,25 +159,14 @@ const openPublishModal = async () => {
 
         try {
             // 2. Hit the backend Fork route
-            const response = await fetch(`http://127.0.0.1:5000/api/community/fork/${projectId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ userId: parsedUser._id })
-            });
+            // ✅ PRODUCTION FIX: Using apiClient
+            const response = await apiClient.post(`/api/community/fork/${projectId}`, { userId: parsedUser._id });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to fork project");
-            }
+            const data = response.data;
 
             toast.success("Project Forked! Teleporting to Editor...", { id: toastId });
 
-            // 3. Redirect the user to their new Editor Room!
-            // ⚠️ NOTE: Change '/editor/' to whatever route you use for your code editor
-           // 3. Redirect the user to their new Editor Room WITH the files!
+            // 3. Redirect the user to their new Editor Room WITH the files!
             setTimeout(() => {
                 navigate(`/editor/${data.project.roomId}`, {
                     state: { 
@@ -197,7 +179,7 @@ const openPublishModal = async () => {
 
         } catch (error) {
             console.error("🔥 Forking Error:", error);
-            toast.error(error.message, { id: toastId });
+            toast.error(error.message || "Failed to fork project", { id: toastId });
         }
     };
 
@@ -368,7 +350,6 @@ const openPublishModal = async () => {
                 </div>
             </div>
 
-            {/* ✨ PUBLISH MODAL OVERLAY */}
             {/* ✨ PUBLISH MODAL OVERLAY ✨ */}
 {isPublishModalOpen && (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fadeIn">

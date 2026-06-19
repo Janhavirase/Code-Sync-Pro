@@ -1,22 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import apiClient from '../api.js';
 
 const AdminDashboard = () => {
     const [stats, setStats] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch stats from your new backend route
-        fetch('http://127.0.0.1:5000/api/admin/stats')
-            .then(res => res.json())
-            .then(data => setStats(data))
-            .catch(err => console.error(err));
+        const fetchStats = async () => {
+            try {
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get('/api/admin/stats');
+                setStats(res.data);
+            } catch (err) {
+                console.error("Failed to fetch admin stats:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchStats();
     }, []);
 
-    if (!stats) return <div className="text-white">Loading Admin Matrix...</div>;
+    if (loading) return <div className="text-white p-10">Loading Admin Matrix...</div>;
+    if (!stats) return <div className="text-white p-10">No data available.</div>;
 
     return (
-        <div className="animate-fadeIn">
-            <h1 className="text-3xl font-bold mb-8">Overview</h1>
+        <div className="animate-fadeIn p-6">
+            <h1 className="text-3xl font-bold mb-8 text-white">Overview</h1>
             
             {/* STAT CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
@@ -27,7 +37,7 @@ const AdminDashboard = () => {
 
             {/* CHART SECTION */}
             <div className="bg-[#1a1a1a] border border-white/5 rounded-2xl p-6 shadow-xl">
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-white">
                     📈 <span className="text-gray-300">Growth Analytics</span>
                 </h3>
                 <div className="h-80 w-full">
@@ -55,18 +65,27 @@ const AdminDashboard = () => {
     );
 };
 
-// Simple reusable card component
-const StatCard = ({ title, value, icon, color }) => (
-    <div className={`bg-[#1a1a1a] border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}>
-        <div className={`absolute top-0 right-0 w-24 h-24 bg-${color}-500/10 rounded-full -mr-10 -mt-10 blur-xl group-hover:bg-${color}-500/20 transition-all`}></div>
-        <div className="flex justify-between items-start relative z-10">
-            <div>
-                <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">{title}</p>
-                <h3 className="text-4xl font-bold text-white mt-1">{value}</h3>
+// Reusable card component with mapped styles for production safety
+const StatCard = ({ title, value, icon, color }) => {
+    const colorStyles = {
+        blue: "bg-blue-500/20 text-blue-400",
+        purple: "bg-purple-500/20 text-purple-400",
+        green: "bg-green-500/20 text-green-400"
+    };
+
+    return (
+        <div className="bg-[#1a1a1a] border border-white/5 p-6 rounded-2xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
+            <div className="flex justify-between items-start relative z-10">
+                <div>
+                    <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">{title}</p>
+                    <h3 className="text-4xl font-bold text-white mt-1">{value}</h3>
+                </div>
+                <div className={`text-3xl p-3 rounded-xl ${colorStyles[color] || colorStyles.blue}`}>
+                    {icon}
+                </div>
             </div>
-            <div className={`text-3xl bg-${color}-500/20 p-3 rounded-xl`}>{icon}</div>
         </div>
-    </div>
-);
+    );
+};
 
 export default AdminDashboard;

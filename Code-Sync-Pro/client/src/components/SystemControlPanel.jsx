@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { initSocket } from '../socket';
+import apiClient from '../api.js';
 
 const SystemControlPanel = () => {
     const [config, setConfig] = useState({
@@ -13,12 +14,13 @@ const SystemControlPanel = () => {
     // Fetch initial state
     useEffect(() => {
         const fetchConfig = async () => {
-            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-            const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
-                headers: { 'x-user-id': userInfo?.user?._id }
-            });
-            const data = await res.json();
-            if (res.ok) setConfig(data);
+            try {
+                // ✅ PRODUCTION FIX: Using apiClient (x-user-id handled by interceptor)
+                const res = await apiClient.get('/api/admin/config');
+                setConfig(res.data);
+            } catch (err) {
+                console.error("Failed to fetch config:", err);
+            }
         };
         fetchConfig();
     }, []);
@@ -32,17 +34,10 @@ const SystemControlPanel = () => {
         setLoading(true);
 
         try {
-            const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-            const res = await fetch('http://127.0.0.1:5000/api/admin/config', {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-user-id': userInfo.user._id 
-                },
-                body: JSON.stringify(newConfig)
-            });
+            // ✅ PRODUCTION FIX: Using apiClient
+            const res = await apiClient.put('/api/admin/config', newConfig);
 
-            if (res.ok) {
+            if (res.status === 200) {
                 toast.success(`${key} updated to ${newValue ? 'ON' : 'OFF'}`);
                 
                 // 📡 NOTIFY EVERYONE VIA SOCKET

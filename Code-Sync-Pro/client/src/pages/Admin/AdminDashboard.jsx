@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../api.js';
 
 // ✅ IMPORTS
 import BroadcastPanel from '../../components/BroadcastPanel';
@@ -13,40 +14,26 @@ const AdminDashboard = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // 1. Get User ID securely
-        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-        const userId = userInfo?.user?._id || userInfo?._id; 
+        const fetchStats = async () => {
+            try {
+                // ✅ PRODUCTION FIX: Using apiClient
+                // The interceptor in api.js will automatically attach the 'x-user-id'
+                const res = await apiClient.get('/api/admin/stats');
+                
+                if (res.data.graphData) {
+                    setStats(res.data);
+                } else {
+                    console.error("Invalid Data:", res.data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch admin stats:", err);
+                // Handle 401/403 errors if needed
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        if (!userId) {
-            console.error("❌ No User ID found in storage. Cannot fetch admin stats.");
-            return;
-        }
-
-        // 2. Fetch stats
-        fetch('http://127.0.0.1:5000/api/admin/stats', {
-            headers: {
-                'Content-Type': 'application/json',
-                'x-user-id': userId 
-            }
-        })
-        .then(res => {
-            if (res.status === 401 || res.status === 403) {
-                throw new Error("Unauthorized: Check your admin role.");
-            }
-            return res.json();
-        })
-        .then(data => {
-            if (data.graphData) {
-                setStats(data);
-            } else {
-                console.error("Invalid Data:", data);
-            }
-            setLoading(false);
-        })
-        .catch(err => {
-            console.error(err);
-            setLoading(false); 
-        });
+        fetchStats();
     }, [navigate]);
 
     if (loading) return (

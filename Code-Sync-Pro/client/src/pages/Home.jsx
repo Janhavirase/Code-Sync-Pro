@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Hash, User, ArrowRight, Sparkles, Mail, Lock, Terminal, ShieldCheck, Zap } from 'lucide-react';
+import apiClient from '../api.js';
 
 const Home = () => {
     const navigate = useNavigate();
@@ -59,21 +60,15 @@ const Home = () => {
         const payload = isLoginMode ? { email, password } : { username, email, password };
 
         try {
-            const res = await fetch(`http://127.0.0.1:5000${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                toast.error(data.msg || 'Auth failed');
-                return;
-            }
+            // ✅ PRODUCTION FIX: Using apiClient
+            const res = await apiClient.post(endpoint, payload);
+            const data = res.data;
+            
             localStorage.setItem('userInfo', JSON.stringify(data.user)); 
             toast.success(isLoginMode ? 'Welcome back!' : 'Account created!');
             navigate('/dashboard', { state: { user: data.user } });
         } catch (err) {
-            toast.error('Server connection failed');
+            toast.error(err.response?.data?.msg || 'Server connection failed');
         }
     };
 

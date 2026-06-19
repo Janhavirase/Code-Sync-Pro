@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Star, GitMerge, Code2, ArrowLeft, Calendar, Trophy, Zap, MapPin } from 'lucide-react';
+import apiClient from '../api.js';
 
 const PublicProfile = () => {
     const { username } = useParams();
@@ -12,12 +12,9 @@ const PublicProfile = () => {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                // Fetching from the public route we made earlier
-                const res = await fetch(`http://127.0.0.1:5000/api/auth/profile/${username}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setProfileData(data);
-                }
+                // ✅ PRODUCTION FIX: Using apiClient
+                const res = await apiClient.get(`/api/auth/profile/${username}`);
+                setProfileData(res.data);
             } catch (error) {
                 console.error("Failed to fetch profile:", error);
             } finally {
@@ -117,7 +114,6 @@ const PublicProfile = () => {
 
                 {/* 📊 THE CLOUT STATS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    {/* Reputation Card */}
                     <div className="bg-gradient-to-br from-[#1a1a1a] to-[#1e1e1e] border border-white/5 rounded-3xl p-8 flex items-center gap-6 shadow-xl hover:-translate-y-1 transition-transform">
                         <div className="h-16 w-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.15)]">
                             <Star size={32} className="text-yellow-400 fill-yellow-400" />
@@ -128,7 +124,6 @@ const PublicProfile = () => {
                         </div>
                     </div>
 
-                    {/* Merged PRs Card */}
                     <div className="bg-gradient-to-br from-[#1a1a1a] to-[#1e1e1e] border border-white/5 rounded-3xl p-8 flex items-center gap-6 shadow-xl hover:-translate-y-1 transition-transform">
                         <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.15)]">
                             <GitMerge size={32} className="text-emerald-400" />
@@ -173,9 +168,9 @@ const PublicProfile = () => {
                                         <h3 className="text-lg font-bold text-gray-200 group-hover:text-white transition-colors truncate pr-4">
                                             {project.title}
                                         </h3>
-                                        <div className="shrink-0 flex items-center gap-1 text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md uppercase tracking-wider">
+                                        <span className="shrink-0 flex items-center gap-1 text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-500/20 uppercase tracking-wider">
                                             <GitMerge size={12} /> Merged
-                                        </div>
+                                        </span>
                                     </div>
                                     
                                     <p className="text-sm text-gray-500 line-clamp-2 mb-6 relative z-10">
@@ -195,7 +190,6 @@ const PublicProfile = () => {
                         </div>
                     )}
                 </div>
-
             </main>
         </div>
     );

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 // --- MICRO COMPONENTS FOR CLEANER CODE ---
 const IconCheck = () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>;
@@ -12,29 +13,22 @@ const AdminLibrary = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [editingItem, setEditingItem] = useState(null);
 
-    // Secure User ID Access
-    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-    const userId = userInfo?.user?._id || userInfo?._id;
-
     // --- DATA FETCHING ---
-    const fetchLibrary = () => {
-        fetch('http://127.0.0.1:5000/api/admin/library', {
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-user-id': userId 
-            }
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (Array.isArray(data)) {
-                setItems(data);
+    const fetchLibrary = async () => {
+        try {
+            // ✅ PRODUCTION FIX: Using apiClient (x-user-id handled by interceptor)
+            const res = await apiClient.get('/api/admin/library');
+            if (Array.isArray(res.data)) {
+                setItems(res.data);
             } else {
-                console.error("Backend Error:", data);
+                console.error("Backend Error:", res.data);
                 setItems([]);
                 toast.error("Failed to load library items");
             }
-        })
-        .catch(err => console.error(err));
+        } catch (err) {
+            console.error(err);
+            toast.error("Failed to load library items");
+        }
     }; 
     
     useEffect(() => { fetchLibrary(); }, []);
@@ -42,41 +36,42 @@ const AdminLibrary = () => {
     // --- ACTIONS ---
     const handleDelete = async (id) => {
         if(!window.confirm("⚠️ Irreversible Action: Delete this item?")) return;
-        const res = await fetch(`http://127.0.0.1:5000/api/admin/library/${id}`, {
-            method: 'DELETE',
-            headers: { 'x-user-id': userId }
-        });
-        if(res.ok) {
+        try {
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.delete(`/api/admin/library/${id}`);
             toast.success("Item erased from existence");
             setItems(prev => prev.filter(i => i._id !== id));
+        } catch (err) {
+            toast.error("Delete failed");
         }
     };
 
     const toggleApproval = async (item) => {
-        const res = await fetch(`http://127.0.0.1:5000/api/admin/library/${item._id}/approve`, {
-            method: 'PATCH',
-            headers: { 'x-user-id': userId }
-        });
-        if(res.ok) {
+        try {
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.patch(`/api/admin/library/${item._id}/approve`);
+            
             const isNowApproved = !item.isApproved;
             toast.success(isNowApproved ? "🚀 Item is now LIVE" : "👻 Item hidden from public");
             fetchLibrary(); 
+        } catch (err) {
+            toast.error("Approval toggle failed");
         }
     };
 
     const saveEdit = async () => {
-        const res = await fetch(`http://127.0.0.1:5000/api/admin/library/${editingItem._id}`, {
-            method: 'PUT',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'x-user-id': userId 
-            },
-            body: JSON.stringify({ title: editingItem.title, desc: editingItem.desc })
-        });
-        if(res.ok) {
+        try {
+            // ✅ PRODUCTION FIX: Using apiClient
+            await apiClient.put(`/api/admin/library/${editingItem._id}`, { 
+                title: editingItem.title, 
+                desc: editingItem.desc 
+            });
+            
             toast.success("Metadata Updated");
             setEditingItem(null); 
             fetchLibrary();
+        } catch (err) {
+            toast.error("Update failed");
         }
     };
 

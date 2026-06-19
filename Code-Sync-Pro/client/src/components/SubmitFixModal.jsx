@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, GitPullRequest } from 'lucide-react';
 import toast from 'react-hot-toast';
+import apiClient from '../api.js';
 
 const SubmitFixModal = ({ isOpen, onClose, files, projectMetadata, currentUser }) => {
     const [title, setTitle] = useState('');
@@ -25,13 +26,9 @@ const SubmitFixModal = ({ isOpen, onClose, files, projectMetadata, currentUser }
                 files
             };
 
-            const response = await fetch('http://127.0.0.1:5000/api/community/pr', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) throw new Error("Failed to submit");
+            // ✅ PRODUCTION FIX: Using apiClient instead of raw fetch
+            // apiClient will automatically use your Render URL in production
+            await apiClient.post('/api/community/pr', payload);
 
             toast.success("Fix submitted to the author! 🎉", { id: toastId });
             onClose();
