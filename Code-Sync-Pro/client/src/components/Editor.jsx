@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
+import * as Y from 'yjs';
+import { WebrtcProvider } from 'y-webrtc';
+import { MonacoBinding } from 'y-monaco';
 
 const Editor = ({ 
-    editorRef,         // 🚨 1. ADDED: Accept the ref from EditorPage.jsx!
+    editorRef, 
     onCodeChange, 
-    code, 
     activeFileName,
     jumpToLine,
     theme = 'vs-dark', 
@@ -14,47 +16,62 @@ const Editor = ({
     fontFamily = 'monospace',
     wordWrap = false,
     comments,
-    socket,
     roomId,
     username
 }) => {
-    // 🚨 2. DELETED: const editorRef = useRef(null); 
-    // We deleted that line so we use the parent's ref instead!
-
     const monacoRef = useRef(null);
     const [editorLoaded, setEditorLoaded] = useState(false);
-
+    
     const commentDecorationsRef = useRef([]);
-    const cursorDecorationsRef = useRef({}); 
 
-    // 1. Handle Editor Mounting
+    // 🚨 SENIOR ENGINEER ARCHITECTURE: CRDT References
+    const providerRef = useRef(null);
+    const bindingRef = useRef(null);
+    const docRef = useRef(null);
+
+    // 1. Handle Editor Mounting & CRDT Initialization
     function handleEditorDidMount(editor, monaco) {
         if (editorRef) {
-            editorRef.current = editor; // 🚨 3. Now this saves directly back to EditorPage!
+            editorRef.current = editor; 
         }
         monacoRef.current = monaco; 
         setEditorLoaded(true);
 
-        // Sync local changes to parent
-        editor.onDidChangeModelContent(() => {
-            const currentCode = editor.getValue();
-            onCodeChange(currentCode); 
+        // --- YJS CRDT SETUP ---
+        const ydoc = new Y.Doc();
+        docRef.current = ydoc;
+
+        // Connect Peer-to-Peer using WebRTC (Bypasses the Node server!)
+        // Notice we added robust fallback signaling servers for production deployment
+        const provider = new WebrtcProvider(`code-sync-${roomId}-${activeFileName}`, ydoc, {
+            signaling: [
+                'wss://signaling.yjs.dev',                 // Primary public server
+                'wss://y-webrtc-signaling-eu.herokuapp.com', // EU Fallback
+                'wss://y-webrtc-signaling-us.herokuapp.com'  // US Fallback
+            ] 
+        });
+        providerRef.current = provider;
+
+        const ytext = ydoc.getText('monaco');
+
+        // Bind the Yjs document directly to Monaco
+        const binding = new MonacoBinding(ytext, editor.getModel(), new Set([editor]), provider.awareness);
+        bindingRef.current = binding;
+
+        // Set the user's cursor name and color for others to see
+        provider.awareness.setLocalStateField('user', {
+            name: username || 'Anonymous',
+            color: '#' + Math.floor(Math.random()*16777215).toString(16) // Random color per user!
         });
 
-        // Track cursor for line selection AND multiplayer broadcasting
+        // Sync local changes to parent for database saving
+        ytext.observe(() => {
+            onCodeChange(ytext.toString());
+        });
+
+        // Track cursor for local line selection (for comments)
         editor.onDidChangeCursorPosition((e) => {
             if (onLineSelect) onLineSelect(e.position.lineNumber, false);
-            
-            if (socket && roomId && username) {
-                socket.emit('cursor-change', {
-                    roomId,
-                    socketId: socket.id,
-                    username: username,
-                    fileName: activeFileName, 
-                    position: e.position,
-                    color: '#ffaa00'
-                });
-            }
         });
 
         // Add Right-Click "Add Comment" Action
@@ -71,77 +88,29 @@ const Editor = ({
         });
     }
 
-    // ... (KEEP THE REST OF YOUR FILE EXACTLY THE SAME FROM HERE DOWN)
-
-    // ==========================================
-    // ✨ RECEIVE MULTIPLAYER CURSORS
-    // ==========================================
-   // ==========================================
-    // ✨ RECEIVE MULTIPLAYER CURSORS
-    // ==========================================
+    // --- CRDT CLEANUP ---
+    // When switching files, destroy the old connection and start a new one
     useEffect(() => {
-        if (!socket) return;
-
-        const handleRemoteCursor = ({ socketId, username: remoteUser, fileName: remoteFileName, position, color }) => {
-            if (!editorRef.current || !monacoRef.current) return;
-
-            const monaco = monacoRef.current;
-            const editor = editorRef.current;
-
-            // ✨ THE FIX: If my friend is on a different file, HIDE their cursor!
-            if (remoteFileName !== activeFileName) {
-                // If they just switched away, erase their old cursor from my screen
-                if (cursorDecorationsRef.current[socketId]) {
-                    editor.deltaDecorations([cursorDecorationsRef.current[socketId]], []);
-                    delete cursorDecorationsRef.current[socketId];
-                }
-                return; // Stop drawing!
-            }
-
-            // Draw the cursor because we are on the exact same file
-            const newCursorDecoration = {
-                range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
-                options: {
-                    className: 'remote-cursor', 
-                    hoverMessage: { value: `**${remoteUser}**` },
-                    stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
-                }
-            };
-
-            const oldDecorationId = cursorDecorationsRef.current[socketId] ? [cursorDecorationsRef.current[socketId]] : [];
-            const newDecorationIds = editor.deltaDecorations(oldDecorationId, [newCursorDecoration]);
-            cursorDecorationsRef.current[socketId] = newDecorationIds[0];
-        };
-
-        const handleUserLeft = ({ socketId }) => {
-            if (editorRef.current && cursorDecorationsRef.current[socketId]) {
-                editorRef.current.deltaDecorations([cursorDecorationsRef.current[socketId]], []);
-                delete cursorDecorationsRef.current[socketId];
-            }
-        };
-
-        socket.on('cursor-change', handleRemoteCursor);
-        socket.on('disconnected', handleUserLeft);
-
         return () => {
-            socket.off('cursor-change', handleRemoteCursor);
-            socket.off('disconnected', handleUserLeft);
+            if (bindingRef.current) bindingRef.current.destroy();
+            if (providerRef.current) providerRef.current.destroy();
+            if (docRef.current) docRef.current.destroy();
         };
-    }, [socket, activeFileName]); // ✨ ADD activeFileName TO DEPENDENCY ARRAY!
+    }, [activeFileName, roomId]);
 
     // ✅ JUMP TO LINE LOGIC
     useEffect(() => {
-        if (editorRef.current && jumpToLine) {
+        if (editorRef && editorRef.current && jumpToLine) {
             const line = parseInt(jumpToLine);
             editorRef.current.revealLineInCenter(line);
             editorRef.current.setPosition({ lineNumber: line, column: 1 });
             editorRef.current.focus();
         }
-    }, [jumpToLine]);
+    }, [jumpToLine, editorRef]);
 
     // ✅ APPLY COMMENT HIGHLIGHTS
     useEffect(() => {
-        if (editorRef.current && monacoRef.current && Array.isArray(comments)) {
+        if (editorRef && editorRef.current && monacoRef.current && Array.isArray(comments)) {
             const newDecorations = comments
                 .filter(comment => comment && comment.line !== undefined && comment.line !== null)
                 .map(comment => {
@@ -164,18 +133,18 @@ const Editor = ({
                 newDecorations          
             );
         }
-    }, [comments]);
+    }, [comments, editorRef]);
 
     // ✅ UPDATE FONT & WRAP OPTIONS
     useEffect(() => {
-        if (editorRef.current) {
+        if (editorRef && editorRef.current) {
             editorRef.current.updateOptions({
                 fontSize: parseInt(fontSize),
                 fontFamily: fontFamily,
                 wordWrap: wordWrap ? 'on' : 'off'
             });
         }
-    }, [fontSize, fontFamily, wordWrap]); 
+    }, [fontSize, fontFamily, wordWrap, editorRef]); 
 
     // ✅ CUSTOM THEME DEFINITIONS
     useEffect(() => {
@@ -226,7 +195,7 @@ const Editor = ({
             height="100%"
             theme={theme}
             language={language}
-            value={code || ""}
+            // 🚨 We removed value={code} because Yjs mathematically controls the code buffer now!
             onMount={handleEditorDidMount}
             options={{
                 minimap: { enabled: false },

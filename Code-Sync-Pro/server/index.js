@@ -37,7 +37,7 @@ const server = http.createServer(app);
 
 // 👇 ENABLE HTTP CORS
 app.use(cors({
-    origin: 'http://localhost:5173', 
+    origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'], // 👈 Added PATCH here
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id','x-auth-token'],
     credentials: true
@@ -66,7 +66,7 @@ app.use('/api/library', libraryRoutes);
 // --- SOCKET.IO SETUP ---
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "*",
         methods: ["GET", "POST"],
     },
 });

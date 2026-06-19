@@ -78,6 +78,44 @@ const [currentProjectMetadata, setCurrentProjectMetadata] = useState(location.st
     const [activeBottomTab, setActiveBottomTab] = useState('console');
     // Add this near your other useState hooks
 const [isOffline, setIsOffline] = useState(false);
+// 🚨 1. SENIOR FIX: The Database Loader State
+    const [isDbLoaded, setIsDbLoaded] = useState(false);
+
+    // 🚨 2. SENIOR FIX: Fetch the actual saved files from MongoDB on mount!
+    useEffect(() => {
+        const fetchSavedProject = async () => {
+            try {
+                // If we came from the dashboard with files already in memory, skip the fetch!
+                if (location.state?.templateFiles || location.state?.projectFiles) {
+                    setIsDbLoaded(true);
+                    return;
+                }
+
+                const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+                
+                // Fetch the project data using the room ID
+                const res = await fetch(`${backendUrl}/api/projects/${roomId}`);
+
+                if (res.ok) {
+                    const project = await res.json();
+                    
+                    // If the project has saved files, overwrite the "Hello World" defaults!
+                    if (project.files && project.files.length > 0) {
+                        setFiles(project.files);
+                        setActiveFileName(project.files[0].name);
+                        codeRef.current = project.files[0].value;
+                    }
+                }
+            } catch (error) {
+                console.error("Error loading project from DB:", error);
+            } finally {
+                // Always tell the UI it's safe to render the Editor now
+                setIsDbLoaded(true);
+            }
+        };
+
+        fetchSavedProject();
+    }, [roomId, location.state]);
     // 💬 RESTORED: Comments State
     const [comments, setComments] = useState([]);
     const [activeLine, setActiveLine] = useState(null);
@@ -600,20 +638,35 @@ const handleDeployClick = () => {
     };
     
     // 💾 RESTORED: Save Project Logic
+  // 💾 RESTORED: Safe Project Save Logic
+   // 💾 RESTORED: Safe Project Save Logic
     const saveProject = async () => {
         if (!userId) return toast.error("Guest Mode: Cannot Save.");
         try {
-            toast.loading("Saving project...");
-            const res = await fetch('http://127.0.0.1:5000/api/projects', {
+            toast.loading("Saving project...", { id: 'save-toast' });
+            const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+
+            // 🚨 SENIOR FIX: Point to your existing POST route which already handles Create & Update!
+            const res = await fetch(`${backendUrl}/api/projects`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roomId, name: `Project ${roomId.slice(0, 4)}`, userId, files })
+                body: JSON.stringify({ 
+                    roomId, 
+                    name: `Project ${roomId.slice(0, 4)}`, // Keep a generic name
+                    userId, 
+                    files 
+                })
             });
-            toast.dismiss();
-            res.ok ? toast.success('Saved Successfully!') : toast.error('Save failed.');
+
+            if (res.ok) {
+                toast.success('Saved Successfully! 💾', { id: 'save-toast' });
+            } else {
+                const errorData = await res.json();
+                throw new Error(errorData.message || "Save failed on server");
+            }
         } catch (error) { 
-            toast.dismiss();
-            toast.error('Server error.'); 
+            console.error(error);
+            toast.error('Server error while saving.', { id: 'save-toast' }); 
         }
     };
     // Add this inside your EditorPage component
@@ -929,6 +982,7 @@ useEffect(() => {
                 <div className="flex-1 flex overflow-hidden relative" style={{ flexDirection: layoutMode === 'bottom' ? 'column' : 'row' }}>
                     <div className={`flex-1 flex flex-col relative ${activeMainView === 'editor' ? 'flex' : 'hidden'}`}>
                         <div className="flex-1 relative">
+                            {isDbLoaded ? (
                             <Editor 
                                 editorRef={editorRef} // 🚨 IMPORTANT: You must pass the ref inside your Editor.jsx component's onMount prop!
                                 key={activeFileName} 
@@ -946,6 +1000,12 @@ useEffect(() => {
     username={user?.username || "Anonymous"}
                                 theme={editorTheme} fontSize={editorFontSize} fontFamily={editorFontFamily} wordWrap={editorWordWrap}
                             />
+                            ) : (
+            <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 bg-[#1e1e1e]">
+                <Loader2 size={32} className="animate-spin text-indigo-500 mb-4" />
+                <p className="text-sm font-bold tracking-widest uppercase">Syncing Workspace...</p>
+            </div>
+        )}
                         </div>
                         {isTimeTravelActive && (
                             <div className="h-12 bg-[#252526] border-t border-[#333] flex items-center px-4 gap-4 z-20 shadow-xl shrink-0">
