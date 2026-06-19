@@ -36,7 +36,7 @@ const handleSubmit = async (e) => {
             // });
             const response = await apiClient.post(endpoint, bodyData);
 
-        const data = await response.json();
+        const data = await response.data();
             
             if (!response.ok) {
                 throw new Error(data.message || 'Auth failed');
