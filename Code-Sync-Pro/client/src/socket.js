@@ -1,6 +1,5 @@
 import { io } from 'socket.io-client';
 
-// 👇 ENSURE 'export' IS WRITTEN HERE
 export const initSocket = async () => {
     const options = {
         'force new connection': true,
@@ -9,6 +8,8 @@ export const initSocket = async () => {
         transports: ['websocket'],
     };
     
-    // Ensure this matches your server port (5000)
-    return io('http://localhost:5000', options);
+    // ✅ PRODUCTION FIX: Use your environment variable for the backend URL
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+    
+    return io(BACKEND_URL, options);
 };
