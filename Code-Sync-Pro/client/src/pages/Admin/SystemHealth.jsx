@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import toast from 'react-hot-toast';
-import apiClient from '../api.js';
-
+import apiClient from '../../api.js';
 const SystemHealth = () => {
     const [health, setHealth] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(new Date());

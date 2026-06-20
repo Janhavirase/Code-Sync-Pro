@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../api.js';
-
+import apiClient from '../../api.js';
 // ✅ IMPORTS
 import BroadcastPanel from '../../components/BroadcastPanel';
 import AuditLogViewer from '../../components/AuditLogViewer';

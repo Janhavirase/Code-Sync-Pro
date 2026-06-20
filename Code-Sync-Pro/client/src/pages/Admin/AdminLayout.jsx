@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-
+import apiClient from '../../api.js';
 const AdminLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
