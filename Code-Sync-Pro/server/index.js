@@ -39,7 +39,7 @@ const server = http.createServer(app);
 const allowedOrigins = [
     "http://localhost:5173", 
     "https://code-sync-pro-iota.vercel.app", 
-    "https://code-sync-4d7qnkoxe-janhavirases-projects.vercel.app"
+  "https://code-sync-cbe3lh9jv-janhavirases-projects.vercel.app"
 ];
 
 // 👇 ENABLE HTTP CORS
