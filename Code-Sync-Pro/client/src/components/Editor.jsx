@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MonacoEditor from '@monaco-editor/react';
-import * as Y from 'yjs';
-import { WebrtcProvider } from 'y-webrtc';
-import { MonacoBinding } from 'y-monaco';
 
 const Editor = ({ 
     editorRef, 
@@ -11,6 +8,7 @@ const Editor = ({
     jumpToLine,
     theme = 'vs-dark', 
     language = 'javascript', 
+    code, // 👈 RESTORED: This allows your Render socket to control the text!
     onLineSelect, 
     fontSize = 16,
     fontFamily = 'monospace',
@@ -24,50 +22,13 @@ const Editor = ({
     
     const commentDecorationsRef = useRef([]);
 
-    // 🚨 SENIOR ENGINEER ARCHITECTURE: CRDT References
-    const providerRef = useRef(null);
-    const bindingRef = useRef(null);
-    const docRef = useRef(null);
-
-    // 1. Handle Editor Mounting & CRDT Initialization
+    // 1. Handle Editor Mounting
     function handleEditorDidMount(editor, monaco) {
         if (editorRef) {
             editorRef.current = editor; 
         }
         monacoRef.current = monaco; 
         setEditorLoaded(true);
-
-        // --- YJS CRDT SETUP ---
-        const ydoc = new Y.Doc();
-        docRef.current = ydoc;
-
-        // Connect Peer-to-Peer using WebRTC (Bypasses the Node server!)
-        // Notice we added robust fallback signaling servers for production deployment
-        const provider = new WebrtcProvider(`code-sync-${roomId}-${activeFileName}`, ydoc, {
-            signaling: [
-                'wss://signaling.yjs.dev',                 // Primary public server
-                'wss://y-webrtc-signaling-eu.herokuapp.com', // EU Fallback
-                'wss://y-webrtc-signaling-us.herokuapp.com'  // US Fallback
-            ] 
-        });
-        providerRef.current = provider;
-
-        const ytext = ydoc.getText('monaco');
-
-        // Bind the Yjs document directly to Monaco
-        const binding = new MonacoBinding(ytext, editor.getModel(), new Set([editor]), provider.awareness);
-        bindingRef.current = binding;
-
-        // Set the user's cursor name and color for others to see
-        provider.awareness.setLocalStateField('user', {
-            name: username || 'Anonymous',
-            color: '#' + Math.floor(Math.random()*16777215).toString(16) // Random color per user!
-        });
-
-        // Sync local changes to parent for database saving
-        ytext.observe(() => {
-            onCodeChange(ytext.toString());
-        });
 
         // Track cursor for local line selection (for comments)
         editor.onDidChangeCursorPosition((e) => {
@@ -88,15 +49,12 @@ const Editor = ({
         });
     }
 
-    // --- CRDT CLEANUP ---
-    // When switching files, destroy the old connection and start a new one
-    useEffect(() => {
-        return () => {
-            if (bindingRef.current) bindingRef.current.destroy();
-            if (providerRef.current) providerRef.current.destroy();
-            if (docRef.current) docRef.current.destroy();
-        };
-    }, [activeFileName, roomId]);
+    // 🚨 NEW: Capture typing and send it to your custom backend!
+    const handleEditorChange = (value) => {
+        if (onCodeChange) {
+            onCodeChange(value);
+        }
+    };
 
     // ✅ JUMP TO LINE LOGIC
     useEffect(() => {
@@ -195,7 +153,8 @@ const Editor = ({
             height="100%"
             theme={theme}
             language={language}
-            // 🚨 We removed value={code} because Yjs mathematically controls the code buffer now!
+            value={code} // 🚨 RESTORED: Reads the live code state from EditorPage
+            onChange={handleEditorChange} // 🚨 ADDED: Broadcasts changes to Socket.io
             onMount={handleEditorDidMount}
             options={{
                 minimap: { enabled: false },

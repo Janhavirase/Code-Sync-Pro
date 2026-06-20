@@ -38,8 +38,8 @@ const server = http.createServer(app);
 // ✅ ADD YOUR VERCEL DOMAINS HERE
 const allowedOrigins = [
     "http://localhost:5173", 
-    "https://code-sync-pro-iota.vercel.app", 
-  "https://code-sync-cbe3lh9jv-janhavirases-projects.vercel.app"
+    "https://code-sync-pro-iota.vercel.app"
+ 
 ];
 
 // 👇 ENABLE HTTP CORS
