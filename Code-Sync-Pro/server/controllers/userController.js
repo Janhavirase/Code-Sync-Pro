@@ -130,7 +130,13 @@ export const getUserProfile = async (req, res) => {
             percentage: totalFiles > 0 ? Math.round((languageMap[lang] / totalFiles) * 100) : 0,
             color: getColorForLang(lang)
         })).sort((a, b) => b.percentage - a.percentage).slice(0, 4);
+// 🛡️ THE FIX: If this user somehow has no username, generate one before saving!
+        if (!user.username) {
+            // Extracts "new" from "new@gmail.com", or creates a random name
+            user.username = user.email ? user.email.split('@')[0] : `user_${Date.now()}`;
+        }
 
+        // Now Mongoose wil
         // Save activity updates
         await user.save();
 
