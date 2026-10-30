@@ -147,9 +147,15 @@ router.post('/', async (req, res) => {
             res.json({ output: response.data.output });
         }
 
-    } catch (err) {
+   } catch (err) {
+        // Log the exact error to your backend terminal
         console.error("JDoodle API Error:", err.response?.data || err.message);
-        res.json({ error: "Failed to execute code on remote server." });
+        
+        // Send the EXACT error to the frontend so you can see it in the Network tab
+        res.status(500).json({ 
+            error: "JDoodle Execution Failed", 
+            details: err.response?.data || err.message 
+        });
     }
 });
 

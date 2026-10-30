@@ -73,14 +73,17 @@ export const getUserProfile = async (req, res) => {
         }
 
         // 🕵️ STEP 2: The Ultra-Forgiving Query
-        const cleanName = user.username.replace(/\.+$/, "");
+      // 🕵️ STEP 2: The Ultra-Forgiving Query
+        // 🛡️ THE FIX: Fallback to an empty string if username is missing
+        const safeUsername = user.username || "";
+        const cleanName = safeUsername.replace(/\.+$/, "");
         
         const openSourceTrophies = await CommunityProject.find({
             $or: [
                 { "contributors.userId": user._id },               // Match Object ID
                 { "contributors.userId": user._id.toString() },    // Match String ID (Common Bug Fix)
-                { "contributors.username": user.username },        // Match Exact Name
-                { "contributors.username": { $regex: new RegExp(`^${cleanName}$`, "i") } } // Match Case-Insensitive
+                { "contributors.username": safeUsername },         // 🛡️ Use safeUsername here too
+                { "contributors.username": { $regex: new RegExp(`^${cleanName}$`, "i") } } 
             ]
         }).sort({ createdAt: -1 });
 
